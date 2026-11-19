@@ -12,12 +12,13 @@ void main() {
         home: MyHomePage(
           loadPlayerCount: () async => 42,
           loadEventCount: () async => 3,
+          loadGameCount: () async => 5,
         ),
       ),
     );
 
     // Pendant le chargement : un tiret par compteur.
-    expect(find.text('–'), findsNWidgets(2));
+    expect(find.text('–'), findsNWidgets(3));
 
     await tester.pump();
 
@@ -25,9 +26,15 @@ void main() {
     expect(find.text('3'), findsOneWidget);
     expect(find.byIcon(Icons.person), findsOneWidget);
     expect(find.byIcon(Icons.confirmation_number), findsOneWidget);
+    expect(find.text('5'), findsOneWidget);
+    expect(find.byIcon(Icons.flag), findsOneWidget);
     expect(
       tester.getCenter(find.text('3')).dx,
       greaterThan(tester.getCenter(find.text('42')).dx),
+    );
+    expect(
+      tester.getCenter(find.text('5')).dx,
+      greaterThan(tester.getCenter(find.text('3')).dx),
     );
   });
 }
