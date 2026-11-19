@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'supabase_config.dart';
+import 'widgets/side_buttons.dart';
 import 'widgets/top_bar.dart';
 
 Future<void> main() async {
@@ -113,6 +114,19 @@ class _MyHomePageState extends State<MyHomePage> {
                 _counter(_gameCount, Icons.flag, 'Parties'),
                 _counter(_boardGameCount, Icons.casino, 'Jeux'),
               ],
+            ),
+            const Expanded(
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: SideButtons(
+                  buttons: [
+                    (Icons.person, 'Joueurs'),
+                    (Icons.confirmation_number, 'Événements'),
+                    (Icons.flag, 'Parties'),
+                    (Icons.casino, 'Jeux'),
+                  ],
+                ),
+              ),
             ),
           ],
         ),

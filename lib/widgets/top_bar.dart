@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+/// Couleur de fond de la barre de menu, réutilisée par les boutons latéraux.
+const topBarColor = Color(0xFF1E1E1E);
+
 /// Barre de menu en haut de l'écran, juste assez haute pour un texte de 14px.
 /// Affiche à gauche un titre, et au centre un groupe d'informations
 /// (icône + nombre). Le groupe reste centré sur toute la largeur, quelle que
@@ -22,7 +25,7 @@ class TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      color: const Color(0xFF1E1E1E),
+      color: topBarColor,
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
       child: Stack(
         alignment: Alignment.center,
