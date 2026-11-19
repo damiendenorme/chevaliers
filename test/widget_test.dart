@@ -9,12 +9,37 @@ import 'package:chevaliers/widgets/section_buttons.dart';
 import 'package:chevaliers/widgets/top_bar.dart';
 
 void main() {
-  testWidgets('Top bar shows player count, then event count on its right', (
-    tester,
-  ) async {
+  testWidgets('Counters are hidden and not loaded by default', (tester) async {
+    var loads = 0;
+    Future<int> count() async {
+      loads++;
+      return 1;
+    }
+
     await tester.pumpWidget(
       MaterialApp(
         home: MyHomePage(
+          loadPlayerCount: count,
+          loadEventCount: count,
+          loadGameCount: count,
+          loadBoardGameCount: count,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(TopBarInfo), findsNothing);
+    expect(find.text('–'), findsNothing);
+    expect(loads, 0);
+    expect(find.text('Les Chevaliers'), findsOneWidget);
+    expect(find.text('Discord'), findsOneWidget);
+  });
+
+  testWidgets('When shown, top bar counters are in order', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          showCounters: true,
           loadPlayerCount: () async => 42,
           loadEventCount: () async => 3,
           loadGameCount: () async => 5,

@@ -77,6 +77,7 @@ class MyHomePage extends StatefulWidget {
     this.loadGameCount = fetchGameCount,
     this.loadBoardGameCount = fetchBoardGameCount,
     this.loadRows = fetchRows,
+    this.showCounters = false,
   });
 
   final Future<int> Function() loadPlayerCount;
@@ -84,6 +85,10 @@ class MyHomePage extends StatefulWidget {
   final Future<int> Function() loadGameCount;
   final Future<int> Function() loadBoardGameCount;
   final Future<RowTable> Function(String table) loadRows;
+
+  /// Affiche les compteurs dans la barre du haut. Cachés pour l'instant ;
+  /// tant qu'ils sont cachés, les nombres ne sont pas chargés.
+  final bool showCounters;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
@@ -140,10 +145,16 @@ class _MyHomePageState extends State<MyHomePage> {
               title: 'Les Chevaliers',
               trailing: 'Discord',
               items: [
-                _counter(_playerCount, Icons.person, 'Joueurs'),
-                _counter(_eventCount, Icons.confirmation_number, 'Événements'),
-                _counter(_gameCount, Icons.flag, 'Parties'),
-                _counter(_boardGameCount, Icons.casino, 'Jeux'),
+                if (widget.showCounters) ...[
+                  _counter(_playerCount, Icons.person, 'Joueurs'),
+                  _counter(
+                    _eventCount,
+                    Icons.confirmation_number,
+                    'Événements',
+                  ),
+                  _counter(_gameCount, Icons.flag, 'Parties'),
+                  _counter(_boardGameCount, Icons.casino, 'Jeux'),
+                ],
               ],
             ),
             // Colonne de 1000px centrée : boutons centrés en haut, tableaux

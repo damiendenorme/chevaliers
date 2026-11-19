@@ -12,6 +12,7 @@ class RowTable {
 /// Lignes d'une table de la base, mises en colonnes.
 ///
 /// Pour `partie` : les deux joueurs, leurs scores et le jeu.
+/// Pour `joueur` : le nom et le jeu favori.
 /// Pour les autres tables : le nom.
 Future<RowTable> fetchRows(String table) async {
   final db = Supabase.instance.client;
@@ -40,6 +41,28 @@ Future<RowTable> fetchRows(String table) async {
     );
   }
 
+  if (table == 'joueur') {
+    final (players, games) = await (
+      db.from('joueur').select('id, nom').order('nom'),
+      db.from('partie').select('joueur1_id, joueur2_id, jeu(nom)'),
+    ).wait;
+    final played = [
+      for (final g in games)
+        (
+          g['joueur1_id'] as int,
+          g['joueur2_id'] as int,
+          g['jeu']['nom'] as String,
+        ),
+    ];
+    return RowTable(
+      columns: const ['Nom', 'Jeu favori'],
+      rows: [
+        for (final p in players)
+          [p['nom'] as String, favoriteGame(p['id'] as int, played) ?? '—'],
+      ],
+    );
+  }
+
   final rows = await db.from(table).select('nom').order('nom');
   return RowTable(
     columns: const ['Nom'],
@@ -47,4 +70,23 @@ Future<RowTable> fetchRows(String table) async {
       for (final r in rows) [r['nom'] as String],
     ],
   );
+}
+
+/// Jeu auquel [playerId] a joué le plus de parties, parmi [games]
+/// (joueur 1, joueur 2, nom du jeu). En cas d'égalité, le premier par ordre
+/// alphabétique. Null si le joueur n'a joué aucune partie.
+String? favoriteGame(int playerId, List<(int, int, String)> games) {
+  final counts = <String, int>{};
+  for (final (p1, p2, game) in games) {
+    if (p1 == playerId || p2 == playerId) {
+      counts[game] = (counts[game] ?? 0) + 1;
+    }
+  }
+  if (counts.isEmpty) return null;
+  final ranked = counts.entries.toList()
+    ..sort((a, b) {
+      final byCount = b.value.compareTo(a.value);
+      return byCount != 0 ? byCount : a.key.compareTo(b.key);
+    });
+  return ranked.first.key;
 }
