@@ -105,6 +105,8 @@ class _MyHomePageState extends State<MyHomePage> {
         child: Column(
           children: [
             TopBar(
+              title: 'Les Chevaliers',
+              trailing: 'Discord',
               items: [
                 _counter(_playerCount, Icons.person, 'Joueurs'),
                 _counter(_eventCount, Icons.confirmation_number, 'Événements'),

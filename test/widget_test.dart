@@ -43,5 +43,26 @@ void main() {
       tester.getCenter(find.text('8')).dx,
       greaterThan(tester.getCenter(find.text('5')).dx),
     );
+
+    // Titre à gauche de la barre.
+    final title = tester.getRect(find.text('Les Chevaliers'));
+    expect(title.left, lessThan(50));
+    expect(
+      title.right,
+      lessThan(tester.getRect(find.byIcon(Icons.person)).left),
+    );
+
+    // « Discord » à droite de la barre.
+    final discord = tester.getRect(find.text('Discord'));
+    expect(
+      discord.right,
+      greaterThan(
+        tester.view.physicalSize.width / tester.view.devicePixelRatio - 50,
+      ),
+    );
+    expect(
+      discord.left,
+      greaterThan(tester.getRect(find.byIcon(Icons.casino)).right),
+    );
   });
 }

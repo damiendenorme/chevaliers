@@ -1,22 +1,47 @@
 import 'package:flutter/material.dart';
 
 /// Barre de menu en haut de l'écran, juste assez haute pour un texte de 14px.
-/// Affiche au centre un groupe d'informations (icône + nombre).
+/// Affiche à gauche un titre, et au centre un groupe d'informations
+/// (icône + nombre). Le groupe reste centré sur toute la largeur, quelle que
+/// soit la longueur du titre.
 class TopBar extends StatelessWidget {
-  const TopBar({super.key, required this.items});
+  const TopBar({
+    super.key,
+    required this.title,
+    required this.items,
+    this.trailing,
+  });
 
+  final String title;
   final List<Widget> items;
+
+  /// Texte affiché à droite de la barre.
+  final String? trailing;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
       color: const Color(0xFF1E1E1E),
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        spacing: 16,
-        children: items,
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(title, style: const TextStyle(fontSize: 14)),
+          ),
+          if (trailing != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(trailing!, style: const TextStyle(fontSize: 14)),
+            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            spacing: 16,
+            children: items,
+          ),
+        ],
       ),
     );
   }
