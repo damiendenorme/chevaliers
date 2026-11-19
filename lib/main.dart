@@ -1,8 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-void main() {
+import 'supabase_config.dart';
+import 'widgets/top_bar.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: supabaseUrl,
+    publishableKey: supabasePublishableKey,
+  );
   runApp(const MyApp());
 }
+
+/// Nombre de lignes dans la table `joueur`.
+Future<int> fetchPlayerCount() =>
+    Supabase.instance.client.from('joueur').count(CountOption.exact);
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -41,11 +54,39 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class MyHomePage extends StatelessWidget {
-  const MyHomePage({super.key});
+class MyHomePage extends StatefulWidget {
+  const MyHomePage({super.key, this.loadPlayerCount = fetchPlayerCount});
+
+  final Future<int> Function() loadPlayerCount;
+
+  @override
+  State<MyHomePage> createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  late final Future<int> _playerCount = widget.loadPlayerCount();
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold();
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            FutureBuilder<int>(
+              future: _playerCount,
+              builder: (context, snapshot) => TopBar(
+                items: [
+                  TopBarInfo(
+                    icon: Icons.person,
+                    value: snapshot.data,
+                    tooltip: 'Joueurs',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
