@@ -5,9 +5,10 @@ import 'top_bar.dart';
 
 /// Tableau dense des lignes d'une table, au style de la barre de menu.
 ///
-/// Remplit la largeur qu'on lui donne (voir [width], la largeur prévue pour
-/// tous les tableaux) et s'affiche en haut à gauche de sa zone.
-/// Gère aussi le chargement, l'erreur et le cas vide, au même emplacement.
+/// Remplit toute la zone qu'on lui donne (voir [width], la largeur prévue
+/// pour tous les tableaux) : son pied reste donc fixe quel que soit le nombre
+/// de lignes, et ce sont les lignes qui défilent à l'intérieur.
+/// Gère aussi le chargement, l'erreur et le cas vide, dans la même zone.
 class RowList extends StatelessWidget {
   const RowList({super.key, required this.rows});
 
@@ -17,6 +18,12 @@ class RowList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return SizedBox.expand(
+      child: ColoredBox(color: topBarColor, child: _content()),
+    );
+  }
+
+  Widget _content() {
     return FutureBuilder<RowTable>(
       future: rows,
       builder: (context, snapshot) {
@@ -24,11 +31,14 @@ class RowList extends StatelessWidget {
           return const _Message('Impossible de charger les données.');
         }
         if (!snapshot.hasData) {
-          return const Align(
-            alignment: Alignment.topLeft,
-            child: SizedBox.square(
-              dimension: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+          return const Padding(
+            padding: EdgeInsets.all(12),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox.square(
+                dimension: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
             ),
           );
         }
@@ -87,6 +97,9 @@ class _Message extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(text, style: const TextStyle(fontSize: 14));
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Text(text, style: const TextStyle(fontSize: 14)),
+    );
   }
 }

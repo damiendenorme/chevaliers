@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chevaliers/data/rows.dart';
 import 'package:chevaliers/main.dart';
+import 'package:chevaliers/widgets/row_list.dart';
 import 'package:chevaliers/widgets/section_buttons.dart';
 import 'package:chevaliers/widgets/top_bar.dart';
 
@@ -68,6 +69,56 @@ void main() {
       discord.left,
       greaterThan(tester.getRect(inBar(Icons.casino)).right),
     );
+  });
+
+  testWidgets('Fixed footer at the bottom, same size as the header', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadPlayerCount: () async => 0,
+          loadEventCount: () async => 0,
+          loadGameCount: () async => 0,
+          loadBoardGameCount: () async => 0,
+          loadRows: (_) async => RowTable(
+            columns: const ['Nom'],
+            rows: [
+              for (var i = 0; i < 100; i++) ['Joueur $i'],
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final screen = tester.getRect(find.byType(MyHomePage));
+    final header = tester.getRect(find.byType(TopBar));
+    final footer = tester.getRect(find.byType(BottomBar));
+    expect(footer.size, header.size);
+    expect(footer.bottom, screen.bottom);
+
+    // Même avec une longue liste, le pied de page reste en bas.
+    await tester.tap(find.byType(SectionButton).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Joueur 0'), findsOneWidget);
+    expect(tester.getRect(find.byType(BottomBar)), footer);
+
+    // Pied du tableau : même distance au footer que celle entre la barre du
+    // haut et les boutons.
+    final buttonsTop = tester.getRect(find.byType(SectionButton).first).top;
+    final tableBox = tester.getRect(find.byType(RowList));
+    expect(footer.top - tableBox.bottom, buttonsTop - header.bottom);
+
+    // C'est le tableau qui défile, pas l'écran.
+    final firstRowBefore = tester.getRect(find.text('Joueur 0')).top;
+    await tester.drag(find.byType(RowList), const Offset(0, -200));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.text('Joueur 0')).top, lessThan(firstRowBefore));
+    expect(tester.getRect(find.byType(RowList)), tableBox);
+    expect(tester.getRect(find.byType(TopBar)), header);
+    expect(tester.getRect(find.byType(SectionButton).first).top, buttonsTop);
+    expect(tester.getRect(find.byType(BottomBar)), footer);
   });
 
   testWidgets('Round buttons form a horizontal row above the tables', (

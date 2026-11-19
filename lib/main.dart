@@ -152,7 +152,14 @@ class _MyHomePageState extends State<MyHomePage> {
               child: Align(
                 alignment: Alignment.topCenter,
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
+                  // En bas, la même distance que celle entre la barre du haut
+                  // et les boutons : le pied du tableau reste fixe.
+                  padding: const EdgeInsets.fromLTRB(
+                    12,
+                    12,
+                    12,
+                    12 + _buttonsTop,
+                  ),
                   child: SizedBox(
                     width: RowList.width,
                     child: Column(
@@ -176,6 +183,8 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
               ),
             ),
+            // Pied de page fixe : toujours en bas de l'écran.
+            const BottomBar(),
           ],
         ),
       ),

@@ -50,6 +50,23 @@ class TopBar extends StatelessWidget {
   }
 }
 
+/// Pied de page, au même style et à la même hauteur que la barre de menu.
+/// Vide pour l'instant : une ligne de texte vide de 14px lui donne exactement
+/// la hauteur de la barre.
+class BottomBar extends StatelessWidget {
+  const BottomBar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: topBarColor,
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+      child: const Text('', style: TextStyle(fontSize: 14)),
+    );
+  }
+}
+
 /// Une information de la barre : une icône suivie d'un nombre.
 /// Tant que [value] est null, un tiret est affiché.
 class TopBarInfo extends StatelessWidget {
