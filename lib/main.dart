@@ -62,7 +62,7 @@ class MyApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
         // Fond uni gris foncé ; le thème sombre garde le texte clair et lisible.
-        scaffoldBackgroundColor: const Color(0xFF2B2B2B),
+        scaffoldBackgroundColor: const Color(0xFF383838),
       ),
       home: const MyHomePage(),
     );
