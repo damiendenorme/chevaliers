@@ -17,6 +17,10 @@ Future<void> main() async {
 Future<int> fetchPlayerCount() =>
     Supabase.instance.client.from('joueur').count(CountOption.exact);
 
+/// Nombre de lignes dans la table `evenement`.
+Future<int> fetchEventCount() =>
+    Supabase.instance.client.from('evenement').count(CountOption.exact);
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -55,9 +59,14 @@ class MyApp extends StatelessWidget {
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, this.loadPlayerCount = fetchPlayerCount});
+  const MyHomePage({
+    super.key,
+    this.loadPlayerCount = fetchPlayerCount,
+    this.loadEventCount = fetchEventCount,
+  });
 
   final Future<int> Function() loadPlayerCount;
+  final Future<int> Function() loadEventCount;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
@@ -65,6 +74,15 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   late final Future<int> _playerCount = widget.loadPlayerCount();
+  late final Future<int> _eventCount = widget.loadEventCount();
+
+  Widget _counter(Future<int> future, IconData icon, String tooltip) {
+    return FutureBuilder<int>(
+      future: future,
+      builder: (context, snapshot) =>
+          TopBarInfo(icon: icon, value: snapshot.data, tooltip: tooltip),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,17 +90,11 @@ class _MyHomePageState extends State<MyHomePage> {
       body: SafeArea(
         child: Column(
           children: [
-            FutureBuilder<int>(
-              future: _playerCount,
-              builder: (context, snapshot) => TopBar(
-                items: [
-                  TopBarInfo(
-                    icon: Icons.person,
-                    value: snapshot.data,
-                    tooltip: 'Joueurs',
-                  ),
-                ],
-              ),
+            TopBar(
+              items: [
+                _counter(_playerCount, Icons.person, 'Joueurs'),
+                _counter(_eventCount, Icons.confirmation_number, 'Événements'),
+              ],
             ),
           ],
         ),

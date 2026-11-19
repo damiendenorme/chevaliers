@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 class TopBar extends StatelessWidget {
   const TopBar({super.key, required this.items});
 
-  final List<TopBarInfo> items;
+  final List<Widget> items;
 
   @override
   Widget build(BuildContext context) {
