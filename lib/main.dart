@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'data/rows.dart';
 import 'supabase_config.dart';
 import 'widgets/row_list.dart';
-import 'widgets/side_buttons.dart';
+import 'widgets/section_buttons.dart';
 import 'widgets/top_bar.dart';
 
 Future<void> main() async {
@@ -95,13 +95,22 @@ class _MyHomePageState extends State<MyHomePage> {
   late final Future<int> _gameCount = widget.loadGameCount();
   late final Future<int> _boardGameCount = widget.loadBoardGameCount();
 
-  /// Boutons latéraux : icône, libellé et table affichée au clic.
+  /// Boutons au-dessus des tableaux : icône, libellé et table affichée au clic.
   static const _sections = [
     (Icons.person, 'Joueurs', 'joueur'),
     (Icons.confirmation_number, 'Événements', 'evenement'),
     (Icons.flag, 'Parties', 'partie'),
     (Icons.casino, 'Jeux', 'jeu'),
   ];
+
+  // Distances mesurées depuis le haut de la zone (sous la barre et sa marge
+  // de 12px). Boutons et tableau se règlent indépendamment.
+
+  /// Haut de la rangée de boutons.
+  static const double _buttonsTop = 52;
+
+  /// Écart entre les boutons et le tableau.
+  static const double _tableGap = 20;
 
   /// Lignes de la table choisie, ou null tant qu'aucun bouton n'a été cliqué.
   Future<RowTable>? _rows;
@@ -137,25 +146,34 @@ class _MyHomePageState extends State<MyHomePage> {
                 _counter(_boardGameCount, Icons.casino, 'Jeux'),
               ],
             ),
+            // Colonne de 1000px centrée : boutons centrés en haut, tableaux
+            // dessous, chacun toujours au même emplacement.
             Expanded(
-              child: Stack(
-                children: [
-                  // Tableau centré sur toute la largeur de l'écran ; les
-                  // boutons (et leur étirement au survol) passent par-dessus.
-                  if (_rows != null)
-                    Positioned.fill(
-                      child: RowList(key: ObjectKey(_rows), rows: _rows!),
-                    ),
-                  Align(
-                    alignment: Alignment.topLeft,
-                    child: SideButtons(
-                      buttons: [
-                        for (final (icon, label, _) in _sections) (icon, label),
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: RowList.width,
+                    child: Column(
+                      children: [
+                        const SizedBox(height: _buttonsTop),
+                        SectionButtons(
+                          buttons: [
+                            for (final (icon, label, _) in _sections)
+                              (icon, label),
+                          ],
+                          onPressed: _showTable,
+                        ),
+                        const SizedBox(height: _tableGap),
+                        if (_rows != null)
+                          Expanded(
+                            child: RowList(key: ObjectKey(_rows), rows: _rows!),
+                          ),
                       ],
-                      onPressed: _showTable,
                     ),
                   ),
-                ],
+                ),
               ),
             ),
           ],

@@ -3,10 +3,15 @@ import 'package:flutter/material.dart';
 import '../data/rows.dart';
 import 'top_bar.dart';
 
-/// Tableau dense des lignes d'une table, centré à l'écran, au style de la
-/// barre de menu. Gère aussi le chargement, l'erreur et le cas vide.
+/// Tableau dense des lignes d'une table, au style de la barre de menu.
+///
+/// Remplit la largeur qu'on lui donne (voir [width], la largeur prévue pour
+/// tous les tableaux) et s'affiche en haut à gauche de sa zone.
+/// Gère aussi le chargement, l'erreur et le cas vide, au même emplacement.
 class RowList extends StatelessWidget {
   const RowList({super.key, required this.rows});
+
+  static const double width = 1000;
 
   final Future<RowTable> rows;
 
@@ -19,7 +24,8 @@ class RowList extends StatelessWidget {
           return const _Message('Impossible de charger les données.');
         }
         if (!snapshot.hasData) {
-          return const Center(
+          return const Align(
+            alignment: Alignment.topLeft,
             child: SizedBox.square(
               dimension: 16,
               child: CircularProgressIndicator(strokeWidth: 2),
@@ -28,12 +34,7 @@ class RowList extends StatelessWidget {
         }
         final table = snapshot.data!;
         if (table.rows.isEmpty) return const _Message('Aucune ligne.');
-        return Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(12),
-            child: _DenseTable(table),
-          ),
-        );
+        return SingleChildScrollView(child: _DenseTable(table));
       },
     );
   }
@@ -59,7 +60,8 @@ class _DenseTable extends StatelessWidget {
     );
 
     return Table(
-      defaultColumnWidth: const IntrinsicColumnWidth(),
+      // Les colonnes se partagent toute la largeur du tableau.
+      defaultColumnWidth: const FlexColumnWidth(),
       border: TableBorder(horizontalInside: divider),
       children: [
         TableRow(
@@ -85,6 +87,6 @@ class _Message extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(child: Text(text, style: const TextStyle(fontSize: 14)));
+    return Text(text, style: const TextStyle(fontSize: 14));
   }
 }
