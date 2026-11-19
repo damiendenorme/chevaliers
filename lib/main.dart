@@ -25,6 +25,10 @@ Future<int> fetchEventCount() =>
 Future<int> fetchGameCount() =>
     Supabase.instance.client.from('partie').count(CountOption.exact);
 
+/// Nombre de lignes dans la table `jeu`.
+Future<int> fetchBoardGameCount() =>
+    Supabase.instance.client.from('jeu').count(CountOption.exact);
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -68,11 +72,13 @@ class MyHomePage extends StatefulWidget {
     this.loadPlayerCount = fetchPlayerCount,
     this.loadEventCount = fetchEventCount,
     this.loadGameCount = fetchGameCount,
+    this.loadBoardGameCount = fetchBoardGameCount,
   });
 
   final Future<int> Function() loadPlayerCount;
   final Future<int> Function() loadEventCount;
   final Future<int> Function() loadGameCount;
+  final Future<int> Function() loadBoardGameCount;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
@@ -82,6 +88,7 @@ class _MyHomePageState extends State<MyHomePage> {
   late final Future<int> _playerCount = widget.loadPlayerCount();
   late final Future<int> _eventCount = widget.loadEventCount();
   late final Future<int> _gameCount = widget.loadGameCount();
+  late final Future<int> _boardGameCount = widget.loadBoardGameCount();
 
   Widget _counter(Future<int> future, IconData icon, String tooltip) {
     return FutureBuilder<int>(
@@ -102,6 +109,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 _counter(_playerCount, Icons.person, 'Joueurs'),
                 _counter(_eventCount, Icons.confirmation_number, 'Événements'),
                 _counter(_gameCount, Icons.flag, 'Parties'),
+                _counter(_boardGameCount, Icons.casino, 'Jeux'),
               ],
             ),
           ],
