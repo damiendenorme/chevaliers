@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chevaliers/data/rows.dart';
 import 'package:chevaliers/main.dart';
 import 'package:chevaliers/widgets/side_buttons.dart';
 import 'package:chevaliers/widgets/top_bar.dart';
@@ -79,6 +80,7 @@ void main() {
           loadEventCount: () async => 0,
           loadGameCount: () async => 0,
           loadBoardGameCount: () async => 0,
+          loadRows: (_) async => const RowTable(columns: ['Nom'], rows: []),
         ),
       ),
     );
@@ -103,6 +105,68 @@ void main() {
       expect(rects[i].width, rects[i].height);
       if (i > 0) expect(rects[i].top, greaterThan(rects[i - 1].bottom));
     }
+  });
+
+  testWidgets('Clicking a side button lists the rows of its table', (
+    tester,
+  ) async {
+    final requested = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadPlayerCount: () async => 0,
+          loadEventCount: () async => 0,
+          loadGameCount: () async => 0,
+          loadBoardGameCount: () async => 0,
+          loadRows: (table) async {
+            requested.add(table);
+            return switch (table) {
+              'joueur' => const RowTable(
+                columns: ['Nom'],
+                rows: [
+                  ['Arthur'],
+                  ['Lancelot'],
+                ],
+              ),
+              'partie' => const RowTable(
+                columns: ['Joueur 1', 'Score 1', 'Score 2', 'Joueur 2', 'Jeu'],
+                rows: [
+                  ['Arthur', '3', '2', 'Lancelot', 'Échecs'],
+                ],
+              ),
+              _ => const RowTable(columns: ['Nom'], rows: []),
+            };
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Arthur'), findsNothing);
+
+    final buttons = find.byType(SideButton);
+
+    await tester.tap(buttons.at(0));
+    await tester.pumpAndSettle();
+    expect(find.text('Nom'), findsOneWidget);
+    expect(find.text('Arthur'), findsOneWidget);
+    expect(find.text('Lancelot'), findsOneWidget);
+    // Tableau centré horizontalement à l'écran.
+    final table = tester.getRect(find.byType(Table));
+    final screenWidth = tester.getSize(find.byType(MyHomePage)).width;
+    expect(table.center.dx, moreOrLessEquals(screenWidth / 2, epsilon: 1));
+
+    await tester.tap(buttons.at(2));
+    await tester.pumpAndSettle();
+    expect(find.text('Lancelot'), findsOneWidget);
+    expect(find.text('Score 1'), findsOneWidget);
+    expect(find.text('Échecs'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+
+    await tester.tap(buttons.at(3));
+    await tester.pumpAndSettle();
+    expect(find.text('Aucune ligne.'), findsOneWidget);
+
+    expect(requested, ['joueur', 'partie', 'jeu']);
   });
 
   testWidgets('Hovering a side button stretches it right to show its label', (

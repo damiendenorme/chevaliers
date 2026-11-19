@@ -5,10 +5,17 @@ import 'top_bar.dart';
 /// Colonne de boutons ronds, chacun avec une icône, empilés de haut en bas
 /// sur le bord gauche de l'écran, au style de la barre de menu.
 class SideButtons extends StatelessWidget {
-  const SideButtons({super.key, required this.buttons});
+  const SideButtons({
+    super.key,
+    required this.buttons,
+    required this.onPressed,
+  });
 
   /// Icône et libellé de chaque bouton, de haut en bas.
   final List<(IconData, String)> buttons;
+
+  /// Appelé avec la position (à partir de 0) du bouton cliqué.
+  final ValueChanged<int> onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -18,13 +25,8 @@ class SideButtons extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: 8,
         children: [
-          for (final (icon, label) in buttons)
-            SideButton(
-              icon: icon,
-              label: label,
-              // Aucune action pour l'instant.
-              onPressed: () {},
-            ),
+          for (final (i, (icon, label)) in buttons.indexed)
+            SideButton(icon: icon, label: label, onPressed: () => onPressed(i)),
         ],
       ),
     );
