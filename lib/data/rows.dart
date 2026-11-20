@@ -80,7 +80,7 @@ Future<List<EloGame>> _fetchEloGames(SupabaseClient db) async {
 /// Lignes d'une table de la base, mises en colonnes.
 ///
 /// Pour `partie` : les deux joueurs, leurs scores et le jeu.
-/// Pour `joueur` : le nom et son ELO à chaque jeu.
+/// Pour `joueur` : le nom et son ELO à chaque jeu auquel il a joué.
 /// Pour `jeu` : le nom et le classement ELO de tous les joueurs.
 /// Pour les autres tables : le nom.
 Future<RowTable> fetchRows(String table) async {
@@ -131,11 +131,13 @@ Future<RowTable> fetchRows(String table) async {
       lists: [
         for (final p in players)
           [
+            // Seulement les jeux auxquels le joueur a joué.
             for (final j in boardGames)
-              (
-                'ELO ${j['nom']}',
-                '${eloOf(elo, j['id'] as int, p['id'] as int)}',
-              ),
+              if (elo[j['id'] as int]?.containsKey(p['id'] as int) ?? false)
+                (
+                  'ELO ${j['nom']}',
+                  '${eloOf(elo, j['id'] as int, p['id'] as int)}',
+                ),
           ],
       ],
       banners: [for (final p in players) bannerAsset(table, p['id'] as int)],
@@ -183,17 +185,17 @@ Future<RowTable> fetchRows(String table) async {
   );
 }
 
-/// Classement ELO d'un jeu : tous les [players] (id → nom), du meilleur au
-/// moins bon, en (« rang. nom », ELO). Un joueur absent de [ratings] n'a
-/// jamais joué à ce jeu et compte pour [eloStart]. À ELO égal, par nom.
+/// Classement ELO d'un jeu : les joueurs qui y ont joué (présents dans
+/// [ratings]), du meilleur au moins bon, en (« rang. nom », ELO), avec leur
+/// nom pris dans [players] (id → nom). À ELO égal, par nom.
 List<(String, String)> ranking(
   Map<int, double> ratings,
   Map<int, String> players,
 ) {
   final ranked =
       [
-        for (final MapEntry(key: id, value: name) in players.entries)
-          (name, ratings[id] ?? eloStart),
+        for (final MapEntry(key: id, value: elo) in ratings.entries)
+          (players[id]!, elo),
       ]..sort((a, b) {
         final byElo = b.$2.compareTo(a.$2);
         return byElo != 0 ? byElo : a.$1.compareTo(b.$1);

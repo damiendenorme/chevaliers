@@ -44,14 +44,15 @@ void main() {
     });
   });
 
-  test('ranking lists every player, best first, ties by name', () {
+  test('ranking lists only players who played, best first, ties by name', () {
     expect(
       ranking({1: 104.6, 2: 95}, {1: 'Arthur', 2: 'Lancelot', 3: 'Bors'}),
-      [('1. Arthur', '105'), ('2. Bors', '100'), ('3. Lancelot', '95')],
+      [('1. Arthur', '105'), ('2. Lancelot', '95')],
     );
-    expect(ranking({}, {2: 'Lancelot', 1: 'Arthur'}), [
+    expect(ranking({2: 100, 1: 100}, {2: 'Lancelot', 1: 'Arthur', 3: 'Bors'}), [
       ('1. Arthur', '100'),
       ('2. Lancelot', '100'),
     ]);
+    expect(ranking({}, {1: 'Arthur'}), isEmpty);
   });
 }
