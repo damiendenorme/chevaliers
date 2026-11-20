@@ -90,13 +90,14 @@ Future<RowTable> fetchRows(String table) async {
     final rows = await db
         .from('partie')
         .select(
-          'id, score_joueur1, score_joueur2, jeu(nom), '
+          'jeu_id, score_joueur1, score_joueur2, jeu(nom), '
           'joueur1:joueur!partie_joueur1_id_fkey(nom), '
           'joueur2:joueur!partie_joueur2_id_fkey(nom)',
         )
         .order('created_at', ascending: false);
     return RowTable(
-      banners: [for (final r in rows) bannerAsset(table, r['id'] as int)],
+      // La bannière d'une partie est celle du jeu joué.
+      banners: [for (final r in rows) bannerAsset('jeu', r['jeu_id'] as int)],
       matchups: [
         for (final r in rows)
           (
