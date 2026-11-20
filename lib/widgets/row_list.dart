@@ -191,6 +191,16 @@ class _MasterLine extends StatelessWidget {
     );
 
     final m = table.matchup(index);
+    final badge = table.badge(index);
+    if (m == null && badge != null) {
+      return Row(
+        spacing: 8,
+        children: [
+          Expanded(child: text(table.title(index))),
+          _Badge(badge, style: style),
+        ],
+      );
+    }
     if (m == null) return text(table.title(index));
 
     final color = style.color ?? DefaultTextStyle.of(context).style.color!;
@@ -218,6 +228,33 @@ class _MasterLine extends StatelessWidget {
           child: text(m.player2, style: style2, align: TextAlign.right),
         ),
       ],
+    );
+  }
+}
+
+/// Pastille avec un nombre, sur un fond légèrement teinté de la couleur du
+/// texte (lisible aussi sur la ligne active).
+class _Badge extends StatelessWidget {
+  const _Badge(this.value, {required this.style});
+
+  final int value;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = style.color ?? DefaultTextStyle.of(context).style.color!;
+    return Container(
+      constraints: const BoxConstraints(minWidth: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        '$value',
+        style: style.copyWith(fontSize: 12),
+        textAlign: TextAlign.center,
+      ),
     );
   }
 }

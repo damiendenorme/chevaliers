@@ -9,6 +9,7 @@ class RowTable {
     required this.columns,
     required this.rows,
     this.matchups,
+    this.badges,
     this.banners,
     this.lists,
   });
@@ -24,6 +25,12 @@ class RowTable {
   final List<Matchup>? matchups;
 
   Matchup? matchup(int index) => matchups?[index];
+
+  /// Nombre affiché dans une pastille à droite de chaque ligne de la liste
+  /// (pour les jeux : le nombre de joueurs qui y ont joué).
+  final List<int>? badges;
+
+  int? badge(int index) => badges?[index];
 
   /// Chemin d'asset de l'image de bannière de chaque ligne (voir
   /// [bannerAsset]). Le fichier peut ne pas exister.
@@ -152,6 +159,8 @@ Future<RowTable> fetchRows(String table) async {
       rows: [
         for (final j in boardGames) [j['nom'] as String],
       ],
+      // Le classement d'un jeu ne contient que les joueurs qui y ont joué.
+      badges: [for (final j in boardGames) elo[j['id'] as int]?.length ?? 0],
       lists: [
         for (final j in boardGames)
           ranking(elo[j['id'] as int] ?? const {}, {

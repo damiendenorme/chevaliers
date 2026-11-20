@@ -337,6 +337,7 @@ void main() {
             rows: [
               ['Échecs'],
             ],
+            badges: [2],
             lists: [
               [('1. Arthur', '105'), ('2. Lancelot', '95')],
             ],
@@ -346,6 +347,15 @@ void main() {
     );
     await tester.tap(find.byType(SectionButton).at(3));
     await tester.pumpAndSettle();
+    // Pastille du nombre de joueurs, à droite de la ligne, sans la grandir.
+    final row = tester.getRect(find.text('Échecs'));
+    final badge = tester.getRect(find.text('2'));
+    final listRight =
+        tester.getRect(find.byType(RowList)).left + RowList.listWidth;
+    expect(badge.right, greaterThan(listRight - 12 - 20));
+    expect(badge.right, lessThanOrEqualTo(listRight - 12));
+    expect(badge.center.dy, moreOrLessEquals(row.center.dy, epsilon: 1));
+
     await tester.tap(find.text('Échecs'));
     await tester.pumpAndSettle();
 
