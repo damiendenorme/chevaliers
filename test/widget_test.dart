@@ -291,6 +291,46 @@ void main() {
     expect(requested, ['joueur', 'partie', 'jeu']);
   });
 
+  testWidgets('A game detail ranks players in a list like the master one', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => const RowTable(
+            columns: ['Nom'],
+            rows: [
+              ['Échecs'],
+            ],
+            lists: [
+              [('1. Arthur', '105'), ('2. Lancelot', '95')],
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byType(SectionButton).at(3));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Échecs'));
+    await tester.pumpAndSettle();
+
+    final master = tester.getRect(find.text('Échecs'));
+    final first = tester.getRect(find.text('1. Arthur'));
+    final firstValue = tester.getRect(find.text('105'));
+    final second = tester.getRect(find.text('2. Lancelot'));
+    // Une ligne par joueur : rang et nom à gauche, ELO à droite, sur la même
+    // ligne ; même hauteur de ligne que la liste de gauche.
+    expect(firstValue.center.dy, first.center.dy);
+    expect(firstValue.left, greaterThanOrEqualTo(first.right));
+    expect(firstValue.right, tester.getRect(find.byType(RowList)).right - 12);
+    expect(second.top - first.top, master.height + 8);
+    expect(find.text('Nom'), findsNothing);
+  });
+
   testWidgets('Hovering a button does not animate it or show its label', (
     tester,
   ) async {

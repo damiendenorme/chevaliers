@@ -123,10 +123,8 @@ class _MasterDetailState extends State<_MasterDetail> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _Banner(table.banner(_selected!)),
-                      _Detail(
-                        columns: table.columns,
-                        values: table.rows[_selected!],
-                      ),
+                      _Detail(table.entries(_selected!)),
+                      _LineList(table.list(_selected!)),
                     ],
                   ),
                 ),
@@ -161,14 +159,54 @@ class _Banner extends StatelessWidget {
   }
 }
 
+/// Liste au style de la liste de gauche : une ligne par élément, son libellé
+/// à gauche et sa valeur à droite.
+class _LineList extends StatelessWidget {
+  const _LineList(this.lines);
+
+  final List<(String, String)> lines;
+
+  @override
+  Widget build(BuildContext context) {
+    final divider = BorderSide(
+      color: Theme.of(context).scaffoldBackgroundColor,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (name, value) in lines)
+          DecoratedBox(
+            decoration: BoxDecoration(border: Border(bottom: divider)),
+            child: Padding(
+              padding: _cellPadding,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      name,
+                      style: _text,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(value, style: _text),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 /// Détail d'une ligne, en liste : pour chaque information, son nom puis sa
 /// valeur dessous. Le nom de la ligne n'est pas repris : il est déjà dans la
 /// liste de gauche.
 class _Detail extends StatelessWidget {
-  const _Detail({required this.columns, required this.values});
+  const _Detail(this.entries);
 
-  final List<String> columns;
-  final List<String> values;
+  /// Informations affichées : (libellé, valeur).
+  final List<(String, String)> entries;
 
   @override
   Widget build(BuildContext context) {
@@ -179,21 +217,20 @@ class _Detail extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final (i, column) in columns.indexed)
-            if (column != 'Nom')
-              Padding(
-                padding: _cellPadding,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      column,
-                      style: _text.copyWith(fontSize: 12, color: labelColor),
-                    ),
-                    Text(values[i], style: _text),
-                  ],
-                ),
+          for (final (label, value) in entries)
+            Padding(
+              padding: _cellPadding,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: _text.copyWith(fontSize: 12, color: labelColor),
+                  ),
+                  Text(value, style: _text),
+                ],
               ),
+            ),
         ],
       ),
     );
