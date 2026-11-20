@@ -140,13 +140,12 @@ class _MasterDetailState extends State<_MasterDetail> {
                   hoverColor: hoverColor,
                   child: Padding(
                     padding: _cellPadding,
-                    child: Text(
-                      table.title(i),
+                    child: _MasterLine(
+                      table,
+                      i,
                       style: i == _selected
                           ? _text.copyWith(color: Colors.white)
                           : _text,
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
@@ -166,6 +165,59 @@ class _MasterDetailState extends State<_MasterDetail> {
                 ],
               ),
             ),
+    );
+  }
+}
+
+/// Contenu d'une ligne de la liste : son libellé, ou pour une partie, le
+/// joueur 1 à gauche, les scores au milieu et le joueur 2 à droite. Le
+/// gagnant et son score sont en gras, le perdant et son score grisés ; à
+/// égalité, aucun des deux.
+class _MasterLine extends StatelessWidget {
+  const _MasterLine(this.table, this.index, {required this.style});
+
+  final RowTable table;
+  final int index;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    Text text(String value, {TextStyle? style, TextAlign? align}) => Text(
+      value,
+      style: style ?? this.style,
+      textAlign: align,
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
+    );
+
+    final m = table.matchup(index);
+    if (m == null) return text(table.title(index));
+
+    final color = style.color ?? DefaultTextStyle.of(context).style.color!;
+    final winner = style.copyWith(fontWeight: FontWeight.bold);
+    final loser = style.copyWith(color: color.withValues(alpha: 0.45));
+    final (style1, style2) = switch (m.score1.compareTo(m.score2)) {
+      > 0 => (winner, loser),
+      < 0 => (loser, winner),
+      _ => (style, style),
+    };
+
+    // Les deux joueurs, puis les deux scores, ont la même largeur : le tiret
+    // entre les scores reste au milieu.
+    return Row(
+      spacing: 8,
+      children: [
+        Expanded(child: text(m.player1, style: style1)),
+        SizedBox(
+          width: 20,
+          child: text('${m.score1}', style: style1, align: TextAlign.right),
+        ),
+        Text('–', style: style),
+        SizedBox(width: 20, child: text('${m.score2}', style: style2)),
+        Expanded(
+          child: text(m.player2, style: style2, align: TextAlign.right),
+        ),
+      ],
     );
   }
 }

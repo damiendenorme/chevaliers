@@ -208,7 +208,14 @@ void main() {
                 ],
               ),
               'partie' => const RowTable(
-                titles: ['Arthur – Lancelot'],
+                matchups: [
+                  (
+                    player1: 'Arthur',
+                    score1: 3,
+                    score2: 2,
+                    player2: 'Lancelot',
+                  ),
+                ],
                 columns: ['Joueur 1', 'Score 1', 'Score 2', 'Joueur 2', 'Jeu'],
                 rows: [
                   ['Arthur', '3', '2', 'Lancelot', 'Échecs'],
@@ -272,13 +279,37 @@ void main() {
     // Changer de table vide le détail.
     await tester.tap(buttons.at(2));
     await tester.pumpAndSettle();
-    expect(find.text('Arthur – Lancelot'), findsOneWidget);
+    // Joueur 1 à gauche, scores au milieu, joueur 2 à droite de la liste.
+    final p1 = tester.getRect(find.text('Arthur'));
+    final scores = tester.getRect(find.text('–'));
+    final p2 = tester.getRect(find.text('Lancelot'));
+    expect(p1.left, playersTable.left + 12);
+    expect(
+      scores.center.dx,
+      moreOrLessEquals(playersTable.left + RowList.listWidth / 2),
+    );
+    expect(p2.right, playersTable.left + RowList.listWidth - 12);
+    expect(scores.center.dy, p1.center.dy);
+    expect(p2.center.dy, p1.center.dy);
     expect(find.text('Score 1'), findsNothing);
-    await tester.tap(find.text('Arthur – Lancelot'));
+    // Gagnant et son score en gras, perdant et son score grisés.
+    FontWeight? weight(String t) =>
+        tester.widget<Text>(find.text(t)).style?.fontWeight;
+    double? alpha(String t) =>
+        tester.widget<Text>(find.text(t)).style?.color?.a;
+    expect(weight('Arthur'), FontWeight.bold);
+    expect(weight('3'), FontWeight.bold);
+    expect(weight('Lancelot'), isNot(FontWeight.bold));
+    expect(weight('2'), isNot(FontWeight.bold));
+    expect(alpha('Lancelot'), lessThan(1));
+    expect(alpha('2'), lessThan(1));
+    expect(alpha('Arthur') ?? 1, 1);
+    await tester.tap(find.text('–'));
     await tester.pumpAndSettle();
     expect(find.text('Score 1'), findsOneWidget);
     expect(find.text('Échecs'), findsOneWidget);
-    expect(find.text('3'), findsOneWidget);
+    // Le score : dans la liste et dans le détail.
+    expect(find.text('3'), findsNWidgets(2));
 
     // Même emplacement et même largeur, quel que soit le contenu.
     final gamesTable = tester.getRect(find.byType(RowList));

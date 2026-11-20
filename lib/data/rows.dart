@@ -8,7 +8,7 @@ class RowTable {
   const RowTable({
     required this.columns,
     required this.rows,
-    this.titles,
+    this.matchups,
     this.banners,
     this.lists,
   });
@@ -16,10 +16,14 @@ class RowTable {
   final List<String> columns;
   final List<List<String>> rows;
 
-  /// Libellé de chaque ligne dans la liste. Par défaut, sa première cellule.
-  final List<String>? titles;
+  /// Libellé de chaque ligne dans la liste : sa première cellule.
+  String title(int index) => rows[index].first;
 
-  String title(int index) => titles?[index] ?? rows[index].first;
+  /// Pour les parties : chaque ligne de la liste montre le joueur 1, les
+  /// scores et le joueur 2, au lieu de son libellé.
+  final List<Matchup>? matchups;
+
+  Matchup? matchup(int index) => matchups?[index];
 
   /// Chemin d'asset de l'image de bannière de chaque ligne (voir
   /// [bannerAsset]). Le fichier peut ne pas exister.
@@ -40,6 +44,9 @@ class RowTable {
       if (column != 'Nom') (column, rows[index][i]),
   ];
 }
+
+/// Une partie dans la liste : joueur 1, scores, joueur 2.
+typedef Matchup = ({String player1, int score1, int score2, String player2});
 
 /// Chemin d'asset de la bannière d'une ligne : `assets/bannieres/<table>/<id>.jpg`.
 String bannerAsset(String table, int id) => 'assets/bannieres/$table/$id.jpg';
@@ -83,8 +90,14 @@ Future<RowTable> fetchRows(String table) async {
         .order('created_at', ascending: false);
     return RowTable(
       banners: [for (final r in rows) bannerAsset(table, r['id'] as int)],
-      titles: [
-        for (final r in rows) '${r['joueur1']['nom']} – ${r['joueur2']['nom']}',
+      matchups: [
+        for (final r in rows)
+          (
+            player1: r['joueur1']['nom'] as String,
+            score1: r['score_joueur1'] as int,
+            score2: r['score_joueur2'] as int,
+            player2: r['joueur2']['nom'] as String,
+          ),
       ],
       columns: const ['Joueur 1', 'Score 1', 'Score 2', 'Joueur 2', 'Jeu'],
       rows: [
