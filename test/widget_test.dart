@@ -201,10 +201,10 @@ void main() {
             requested.add(table);
             return switch (table) {
               'joueur' => const RowTable(
-                columns: ['Nom'],
+                columns: ['Nom', 'Jeu favori'],
                 rows: [
-                  ['Arthur'],
-                  ['Lancelot'],
+                  ['Arthur', 'Dames'],
+                  ['Lancelot', 'Échecs'],
                 ],
               ),
               'partie' => const RowTable(
@@ -230,7 +230,7 @@ void main() {
     // La liste à gauche ; rien à droite tant qu'aucune ligne n'est choisie.
     expect(find.text('Arthur'), findsOneWidget);
     expect(find.text('Lancelot'), findsOneWidget);
-    expect(find.text('Nom'), findsNothing);
+    expect(find.text('Jeu favori'), findsNothing);
     // Zone de 1000px, centrée horizontalement.
     final playersTable = tester.getRect(find.byType(RowList));
     final barBottom = tester.getRect(find.byType(TopBar)).bottom;
@@ -241,12 +241,21 @@ void main() {
     // Au clic sur une ligne, son détail s'affiche à droite de la liste.
     await tester.tap(find.text('Lancelot'));
     await tester.pumpAndSettle();
-    expect(find.text('Nom'), findsOneWidget);
-    expect(find.text('Lancelot'), findsNWidgets(2));
+    // En liste : le nom de l'information, puis sa valeur dessous. Le nom du
+    // joueur n'est pas repris.
+    expect(find.byType(Table), findsNothing);
+    expect(find.text('Nom'), findsNothing);
+    expect(find.text('Lancelot'), findsOneWidget);
+    final label = tester.getRect(find.text('Jeu favori'));
+    final value = tester.getRect(find.text('Échecs'));
     expect(
-      tester.getRect(find.text('Nom')).left,
+      label.left,
       greaterThanOrEqualTo(playersTable.left + RowList.listWidth),
     );
+    expect(value.left, label.left);
+    expect(value.top, greaterThanOrEqualTo(label.bottom));
+    // Bannière de 160px en haut du détail, sur toute sa largeur.
+    expect(label.top, greaterThanOrEqualTo(playersTable.top + 160));
 
     // Boutons centrés sur le tableau, restés à leur place (52px + 12px sous
     // la barre).

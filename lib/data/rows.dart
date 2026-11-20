@@ -3,7 +3,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// Contenu d'une table prêt à afficher : les en-têtes de colonnes, puis une
 /// liste de lignes (une cellule texte par colonne).
 class RowTable {
-  const RowTable({required this.columns, required this.rows, this.titles});
+  const RowTable({
+    required this.columns,
+    required this.rows,
+    this.titles,
+    this.banners,
+  });
 
   final List<String> columns;
   final List<List<String>> rows;
@@ -12,6 +17,12 @@ class RowTable {
   final List<String>? titles;
 
   String title(int index) => titles?[index] ?? rows[index].first;
+
+  /// Chemin d'asset de l'image de bannière de chaque ligne (voir
+  /// [bannerAsset]). Le fichier peut ne pas exister.
+  final List<String?>? banners;
+
+  String? banner(int index) => banners?[index];
 }
 
 /// Lignes d'une table de la base, mises en colonnes.
@@ -19,6 +30,9 @@ class RowTable {
 /// Pour `partie` : les deux joueurs, leurs scores et le jeu.
 /// Pour `joueur` : le nom et le jeu favori.
 /// Pour les autres tables : le nom.
+/// Chemin d'asset de la bannière d'une ligne : `assets/bannieres/<table>/<id>.jpg`.
+String bannerAsset(String table, int id) => 'assets/bannieres/$table/$id.jpg';
+
 Future<RowTable> fetchRows(String table) async {
   final db = Supabase.instance.client;
 
@@ -26,12 +40,13 @@ Future<RowTable> fetchRows(String table) async {
     final rows = await db
         .from('partie')
         .select(
-          'score_joueur1, score_joueur2, jeu(nom), '
+          'id, score_joueur1, score_joueur2, jeu(nom), '
           'joueur1:joueur!partie_joueur1_id_fkey(nom), '
           'joueur2:joueur!partie_joueur2_id_fkey(nom)',
         )
         .order('created_at', ascending: false);
     return RowTable(
+      banners: [for (final r in rows) bannerAsset(table, r['id'] as int)],
       titles: [
         for (final r in rows) '${r['joueur1']['nom']} – ${r['joueur2']['nom']}',
       ],
@@ -63,6 +78,7 @@ Future<RowTable> fetchRows(String table) async {
         ),
     ];
     return RowTable(
+      banners: [for (final p in players) bannerAsset(table, p['id'] as int)],
       columns: const ['Nom', 'Jeu favori'],
       rows: [
         for (final p in players)
@@ -71,8 +87,12 @@ Future<RowTable> fetchRows(String table) async {
     );
   }
 
-  final rows = await db.from(table).select('nom').order('nom', ascending: true);
+  final rows = await db
+      .from(table)
+      .select('id, nom')
+      .order('nom', ascending: true);
   return RowTable(
+    banners: [for (final r in rows) bannerAsset(table, r['id'] as int)],
     columns: const ['Nom'],
     rows: [
       for (final r in rows) [r['nom'] as String],

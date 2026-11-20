@@ -22,8 +22,12 @@ class RowList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Coins arrondis ; le contenu (ligne active, survol) est découpé avec.
     return SizedBox.expand(
-      child: ColoredBox(color: topBarColor, child: _content()),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: ColoredBox(color: topBarColor, child: _content()),
+      ),
     );
   }
 
@@ -89,15 +93,18 @@ class _MasterDetailState extends State<_MasterDetail> {
               children: [
                 for (var i = 0; i < table.rows.length; i++)
                   Material(
-                    color: i == _selected ? Colors.white12 : topBarColor,
+                    color: i == _selected ? accentColor : topBarColor,
                     shape: Border(bottom: divider),
                     child: InkWell(
                       onTap: () => setState(() => _selected = i),
+                      hoverColor: hoverColor,
                       child: Padding(
                         padding: _cellPadding,
                         child: Text(
                           table.title(i),
-                          style: _text,
+                          style: i == _selected
+                              ? _text.copyWith(color: Colors.white)
+                              : _text,
                           softWrap: false,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -112,9 +119,15 @@ class _MasterDetailState extends State<_MasterDetail> {
           child: _selected == null
               ? const SizedBox.shrink()
               : SingleChildScrollView(
-                  child: _Detail(
-                    columns: table.columns,
-                    values: table.rows[_selected!],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _Banner(table.banner(_selected!)),
+                      _Detail(
+                        columns: table.columns,
+                        values: table.rows[_selected!],
+                      ),
+                    ],
                   ),
                 ),
         ),
@@ -123,7 +136,34 @@ class _MasterDetailState extends State<_MasterDetail> {
   }
 }
 
-/// Détail d'une ligne : chaque colonne, son nom à gauche et sa valeur à droite.
+/// Bannière en haut du détail : l'image (asset) de la ligne sur toute la
+/// largeur. Sans fichier, un bandeau vide de même taille.
+class _Banner extends StatelessWidget {
+  const _Banner(this.asset);
+
+  static const double height = 160;
+
+  final String? asset;
+
+  @override
+  Widget build(BuildContext context) {
+    final empty = ColoredBox(color: Theme.of(context).scaffoldBackgroundColor);
+    return SizedBox(
+      height: height,
+      child: asset == null
+          ? empty
+          : Image.asset(
+              asset!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => empty,
+            ),
+    );
+  }
+}
+
+/// Détail d'une ligne, en liste : pour chaque information, son nom puis sa
+/// valeur dessous. Le nom de la ligne n'est pas repris : il est déjà dans la
+/// liste de gauche.
 class _Detail extends StatelessWidget {
   const _Detail({required this.columns, required this.values});
 
@@ -132,28 +172,30 @@ class _Detail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final headerColor = Theme.of(context).colorScheme.onSurfaceVariant;
-    final divider = BorderSide(
-      color: Theme.of(context).scaffoldBackgroundColor,
-    );
+    final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
 
-    Widget cell(String text, {Color? color}) => Padding(
-      padding: _cellPadding,
-      child: Text(text, style: _text.copyWith(color: color)),
-    );
-
-    return Table(
-      columnWidths: const {0: IntrinsicColumnWidth(), 1: FlexColumnWidth()},
-      border: TableBorder(horizontalInside: divider),
-      children: [
-        for (final (i, column) in columns.indexed)
-          TableRow(
-            children: [
-              cell(column, color: headerColor),
-              cell(values[i]),
-            ],
-          ),
-      ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (i, column) in columns.indexed)
+            if (column != 'Nom')
+              Padding(
+                padding: _cellPadding,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      column,
+                      style: _text.copyWith(fontSize: 12, color: labelColor),
+                    ),
+                    Text(values[i], style: _text),
+                  ],
+                ),
+              ),
+        ],
+      ),
     );
   }
 }

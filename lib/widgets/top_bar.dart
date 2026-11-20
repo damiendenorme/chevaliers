@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 
-/// Couleur de fond de la barre de menu, réutilisée par les boutons latéraux.
-const topBarColor = Color(0xFF1E1E1E);
+/// Couleur des zones posées sur le fond (barres, boutons, tableaux) : blanc.
+const topBarColor = Colors.white;
+
+/// Couleur des éléments actifs : bleu, avec le texte en blanc.
+const accentColor = Color(0xFF2F6FDB);
+
+/// Couleur des survols : bleu clair, pour garder le texte sombre lisible.
+const hoverColor = Color(0xFFD6E4FB);
 
 /// Barre de menu en haut de l'écran, juste assez haute pour un texte de 14px.
 /// Affiche à gauche un titre, et au centre un groupe d'informations

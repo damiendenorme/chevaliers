@@ -62,6 +62,7 @@ class SectionButton extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onPressed,
+          hoverColor: hoverColor,
           child: SizedBox.square(dimension: size, child: Icon(icon)),
         ),
       ),

@@ -59,10 +59,10 @@ class MyApp extends StatelessWidget {
         // tested with just a hot reload.
         colorScheme: .fromSeed(
           seedColor: Colors.deepPurple,
-          brightness: Brightness.dark,
+          brightness: Brightness.light,
         ),
-        // Fond uni gris foncé ; le thème sombre garde le texte clair et lisible.
-        scaffoldBackgroundColor: const Color(0xFF383838),
+        // Fond gris très clair, avec une pointe de bleu.
+        scaffoldBackgroundColor: const Color(0xFFE9ECF2),
       ),
       home: const MyHomePage(),
     );
