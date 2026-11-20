@@ -56,14 +56,20 @@ class SectionButton extends StatelessWidget {
       button: true,
       label: label,
       excludeSemantics: true,
-      child: Material(
-        color: topBarColor,
-        shape: const CircleBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onPressed,
-          hoverColor: hoverColor,
-          child: SizedBox.square(dimension: size, child: Icon(icon)),
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: lightShadow,
+        ),
+        child: Material(
+          color: topBarColor,
+          shape: const CircleBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onPressed,
+            hoverColor: hoverColor,
+            child: SizedBox.square(dimension: size, child: Icon(icon)),
+          ),
         ),
       ),
     );

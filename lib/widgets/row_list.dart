@@ -4,31 +4,29 @@ import '../data/rows.dart';
 import 'top_bar.dart';
 
 /// Liste des lignes d'une table à gauche, détail de la ligne choisie à
-/// droite, au style de la barre de menu.
+/// droite, chacun dans sa carte, au style de la barre de menu.
 ///
 /// Remplit toute la zone qu'on lui donne (voir [width], la largeur prévue
 /// pour tous les tableaux) : son pied reste donc fixe quel que soit le nombre
 /// de lignes, et ce sont la liste et le détail qui défilent à l'intérieur.
-/// Gère aussi le chargement, l'erreur et le cas vide, dans la même zone.
+/// Gère aussi le chargement, l'erreur et le cas vide, dans la carte de la
+/// liste.
 class RowList extends StatelessWidget {
   const RowList({super.key, required this.rows});
 
   static const double width = 1000;
 
-  /// Largeur de la liste, à gauche.
+  /// Largeur de la carte de la liste, à gauche.
   static const double listWidth = 300;
+
+  /// Écart entre la carte de la liste et celle du détail.
+  static const double gap = 12;
 
   final Future<RowTable> rows;
 
   @override
   Widget build(BuildContext context) {
-    // Coins arrondis ; le contenu (ligne active, survol) est découpé avec.
-    return SizedBox.expand(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: ColoredBox(color: topBarColor, child: _content()),
-      ),
-    );
+    return SizedBox.expand(child: _content());
   }
 
   Widget _content() {
@@ -36,24 +34,71 @@ class RowList extends StatelessWidget {
       future: rows,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return const _Message('Impossible de charger les données.');
+          return const _Cards(
+            master: _Message('Impossible de charger les données.'),
+          );
         }
         if (!snapshot.hasData) {
-          return const Padding(
-            padding: EdgeInsets.all(12),
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: SizedBox.square(
-                dimension: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
+          return const _Cards(
+            master: Padding(
+              padding: EdgeInsets.all(12),
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
               ),
             ),
           );
         }
         final table = snapshot.data!;
-        if (table.rows.isEmpty) return const _Message('Aucune ligne.');
+        if (table.rows.isEmpty) {
+          return const _Cards(master: _Message('Aucune ligne.'));
+        }
         return _MasterDetail(table);
       },
+    );
+  }
+}
+
+/// Les deux cartes côte à côte : la liste à gauche, le détail à droite.
+class _Cards extends StatelessWidget {
+  const _Cards({required this.master, this.detail});
+
+  final Widget master;
+  final Widget? detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: RowList.gap,
+      children: [
+        SizedBox(width: RowList.listWidth, child: _Card(master)),
+        Expanded(child: _Card(detail ?? const SizedBox.shrink())),
+      ],
+    );
+  }
+}
+
+/// Carte au style de la barre de menu, à coins arrondis et légère ombre ; son
+/// contenu (ligne active, survol) est découpé avec.
+class _Card extends StatelessWidget {
+  const _Card(this.child);
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(8);
+    // L'ombre est posée hors du découpage, pour ne pas être coupée.
+    return DecoratedBox(
+      decoration: BoxDecoration(borderRadius: radius, boxShadow: lightShadow),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: ColoredBox(color: topBarColor, child: child),
+      ),
     );
   }
 }
@@ -81,55 +126,46 @@ class _MasterDetailState extends State<_MasterDetail> {
       color: Theme.of(context).scaffoldBackgroundColor,
     );
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          width: RowList.listWidth,
-          decoration: BoxDecoration(border: Border(right: divider)),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < table.rows.length; i++)
-                  Material(
-                    color: i == _selected ? accentColor : topBarColor,
-                    shape: Border(bottom: divider),
-                    child: InkWell(
-                      onTap: () => setState(() => _selected = i),
-                      hoverColor: hoverColor,
-                      child: Padding(
-                        padding: _cellPadding,
-                        child: Text(
-                          table.title(i),
-                          style: i == _selected
-                              ? _text.copyWith(color: Colors.white)
-                              : _text,
-                          softWrap: false,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
+    return _Cards(
+      master: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < table.rows.length; i++)
+              Material(
+                color: i == _selected ? accentColor : topBarColor,
+                shape: Border(bottom: divider),
+                child: InkWell(
+                  onTap: () => setState(() => _selected = i),
+                  hoverColor: hoverColor,
+                  child: Padding(
+                    padding: _cellPadding,
+                    child: Text(
+                      table.title(i),
+                      style: i == _selected
+                          ? _text.copyWith(color: Colors.white)
+                          : _text,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-              ],
-            ),
-          ),
-        ),
-        Expanded(
-          child: _selected == null
-              ? const SizedBox.shrink()
-              : SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _Banner(table.banner(_selected!)),
-                      _Detail(table.entries(_selected!)),
-                      _LineList(table.list(_selected!)),
-                    ],
-                  ),
                 ),
+              ),
+          ],
         ),
-      ],
+      ),
+      detail: _selected == null
+          ? null
+          : SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _Banner(table.banner(_selected!)),
+                  _Detail(table.entries(_selected!)),
+                  _LineList(table.list(_selected!)),
+                ],
+              ),
+            ),
     );
   }
 }

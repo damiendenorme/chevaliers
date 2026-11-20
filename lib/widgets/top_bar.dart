@@ -9,6 +9,11 @@ const accentColor = Color(0xFF2F6FDB);
 /// Couleur des survols : bleu clair, pour garder le texte sombre lisible.
 const hoverColor = Color(0xFFD6E4FB);
 
+/// Légère ombre portée des boutons et des cartes.
+const lightShadow = [
+  BoxShadow(color: Color(0x1F000000), blurRadius: 4, offset: Offset(0, 1)),
+];
+
 /// Barre de menu en haut de l'écran, juste assez haute pour un texte de 14px.
 /// Affiche à gauche un titre, et au centre un groupe d'informations
 /// (icône + nombre). Le groupe reste centré sur toute la largeur, quelle que
