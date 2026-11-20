@@ -135,9 +135,9 @@ void main() {
     final tableBox = tester.getRect(find.byType(RowList));
     expect(footer.top - tableBox.bottom, buttonsTop - header.bottom);
 
-    // C'est le tableau qui défile, pas l'écran.
+    // C'est la liste qui défile, pas l'écran.
     final firstRowBefore = tester.getRect(find.text('Joueur 0')).top;
-    await tester.drag(find.byType(RowList), const Offset(0, -200));
+    await tester.drag(find.text('Joueur 0'), const Offset(0, -200));
     await tester.pumpAndSettle();
     expect(tester.getRect(find.text('Joueur 0')).top, lessThan(firstRowBefore));
     expect(tester.getRect(find.byType(RowList)), tableBox);
@@ -208,6 +208,7 @@ void main() {
                 ],
               ),
               'partie' => const RowTable(
+                titles: ['Arthur – Lancelot'],
                 columns: ['Joueur 1', 'Score 1', 'Score 2', 'Joueur 2', 'Jeu'],
                 rows: [
                   ['Arthur', '3', '2', 'Lancelot', 'Échecs'],
@@ -226,14 +227,26 @@ void main() {
 
     await tester.tap(buttons.at(0));
     await tester.pumpAndSettle();
-    expect(find.text('Nom'), findsOneWidget);
+    // La liste à gauche ; rien à droite tant qu'aucune ligne n'est choisie.
     expect(find.text('Arthur'), findsOneWidget);
     expect(find.text('Lancelot'), findsOneWidget);
-    // Tableau de 1000px, centré horizontalement.
-    final playersTable = tester.getRect(find.byType(Table));
+    expect(find.text('Nom'), findsNothing);
+    // Zone de 1000px, centrée horizontalement.
+    final playersTable = tester.getRect(find.byType(RowList));
     final barBottom = tester.getRect(find.byType(TopBar)).bottom;
     expect(playersTable.width, 1000);
     expect(playersTable.center.dx, moreOrLessEquals(1400 / 2));
+    expect(tester.getRect(find.text('Arthur')).left, playersTable.left + 12);
+
+    // Au clic sur une ligne, son détail s'affiche à droite de la liste.
+    await tester.tap(find.text('Lancelot'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nom'), findsOneWidget);
+    expect(find.text('Lancelot'), findsNWidgets(2));
+    expect(
+      tester.getRect(find.text('Nom')).left,
+      greaterThanOrEqualTo(playersTable.left + RowList.listWidth),
+    );
 
     // Boutons centrés sur le tableau, restés à leur place (52px + 12px sous
     // la barre).
@@ -247,17 +260,20 @@ void main() {
     // Tableau 20px sous les boutons.
     expect(playersTable.top - firstButton.bottom, 20);
 
+    // Changer de table vide le détail.
     await tester.tap(buttons.at(2));
     await tester.pumpAndSettle();
-    expect(find.text('Lancelot'), findsOneWidget);
+    expect(find.text('Arthur – Lancelot'), findsOneWidget);
+    expect(find.text('Score 1'), findsNothing);
+    await tester.tap(find.text('Arthur – Lancelot'));
+    await tester.pumpAndSettle();
     expect(find.text('Score 1'), findsOneWidget);
     expect(find.text('Échecs'), findsOneWidget);
     expect(find.text('3'), findsOneWidget);
 
     // Même emplacement et même largeur, quel que soit le contenu.
-    final gamesTable = tester.getRect(find.byType(Table));
-    expect(gamesTable.topLeft, playersTable.topLeft);
-    expect(gamesTable.width, playersTable.width);
+    final gamesTable = tester.getRect(find.byType(RowList));
+    expect(gamesTable, playersTable);
 
     await tester.tap(buttons.at(3));
     await tester.pumpAndSettle();

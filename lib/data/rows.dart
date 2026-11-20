@@ -3,10 +3,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// Contenu d'une table prêt à afficher : les en-têtes de colonnes, puis une
 /// liste de lignes (une cellule texte par colonne).
 class RowTable {
-  const RowTable({required this.columns, required this.rows});
+  const RowTable({required this.columns, required this.rows, this.titles});
 
   final List<String> columns;
   final List<List<String>> rows;
+
+  /// Libellé de chaque ligne dans la liste. Par défaut, sa première cellule.
+  final List<String>? titles;
+
+  String title(int index) => titles?[index] ?? rows[index].first;
 }
 
 /// Lignes d'une table de la base, mises en colonnes.
@@ -27,6 +32,9 @@ Future<RowTable> fetchRows(String table) async {
         )
         .order('created_at', ascending: false);
     return RowTable(
+      titles: [
+        for (final r in rows) '${r['joueur1']['nom']} – ${r['joueur2']['nom']}',
+      ],
       columns: const ['Joueur 1', 'Score 1', 'Score 2', 'Joueur 2', 'Jeu'],
       rows: [
         for (final r in rows)
@@ -43,7 +51,7 @@ Future<RowTable> fetchRows(String table) async {
 
   if (table == 'joueur') {
     final (players, games) = await (
-      db.from('joueur').select('id, nom').order('nom'),
+      db.from('joueur').select('id, nom').order('nom', ascending: true),
       db.from('partie').select('joueur1_id, joueur2_id, jeu(nom)'),
     ).wait;
     final played = [
@@ -63,7 +71,7 @@ Future<RowTable> fetchRows(String table) async {
     );
   }
 
-  final rows = await db.from(table).select('nom').order('nom');
+  final rows = await db.from(table).select('nom').order('nom', ascending: true);
   return RowTable(
     columns: const ['Nom'],
     rows: [

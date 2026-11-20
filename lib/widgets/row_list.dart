@@ -3,16 +3,20 @@ import 'package:flutter/material.dart';
 import '../data/rows.dart';
 import 'top_bar.dart';
 
-/// Tableau dense des lignes d'une table, au style de la barre de menu.
+/// Liste des lignes d'une table à gauche, détail de la ligne choisie à
+/// droite, au style de la barre de menu.
 ///
 /// Remplit toute la zone qu'on lui donne (voir [width], la largeur prévue
 /// pour tous les tableaux) : son pied reste donc fixe quel que soit le nombre
-/// de lignes, et ce sont les lignes qui défilent à l'intérieur.
+/// de lignes, et ce sont la liste et le détail qui défilent à l'intérieur.
 /// Gère aussi le chargement, l'erreur et le cas vide, dans la même zone.
 class RowList extends StatelessWidget {
   const RowList({super.key, required this.rows});
 
   static const double width = 1000;
+
+  /// Largeur de la liste, à gauche.
+  static const double listWidth = 300;
 
   final Future<RowTable> rows;
 
@@ -44,46 +48,110 @@ class RowList extends StatelessWidget {
         }
         final table = snapshot.data!;
         if (table.rows.isEmpty) return const _Message('Aucune ligne.');
-        return SingleChildScrollView(child: _DenseTable(table));
+        return _MasterDetail(table);
       },
     );
   }
 }
 
-class _DenseTable extends StatelessWidget {
-  const _DenseTable(this.table);
+const _text = TextStyle(fontSize: 14);
+const _cellPadding = EdgeInsets.symmetric(horizontal: 12, vertical: 4);
+
+class _MasterDetail extends StatefulWidget {
+  const _MasterDetail(this.table);
 
   final RowTable table;
 
-  static const _text = TextStyle(fontSize: 14);
+  @override
+  State<_MasterDetail> createState() => _MasterDetailState();
+}
+
+class _MasterDetailState extends State<_MasterDetail> {
+  /// Ligne affichée à droite, ou null tant qu'aucune n'est choisie.
+  int? _selected;
 
   @override
   Widget build(BuildContext context) {
+    final table = widget.table;
     final divider = BorderSide(
       color: Theme.of(context).scaffoldBackgroundColor,
     );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          width: RowList.listWidth,
+          decoration: BoxDecoration(border: Border(right: divider)),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < table.rows.length; i++)
+                  Material(
+                    color: i == _selected ? Colors.white12 : topBarColor,
+                    shape: Border(bottom: divider),
+                    child: InkWell(
+                      onTap: () => setState(() => _selected = i),
+                      child: Padding(
+                        padding: _cellPadding,
+                        child: Text(
+                          table.title(i),
+                          style: _text,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: _selected == null
+              ? const SizedBox.shrink()
+              : SingleChildScrollView(
+                  child: _Detail(
+                    columns: table.columns,
+                    values: table.rows[_selected!],
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Détail d'une ligne : chaque colonne, son nom à gauche et sa valeur à droite.
+class _Detail extends StatelessWidget {
+  const _Detail({required this.columns, required this.values});
+
+  final List<String> columns;
+  final List<String> values;
+
+  @override
+  Widget build(BuildContext context) {
     final headerColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    final divider = BorderSide(
+      color: Theme.of(context).scaffoldBackgroundColor,
+    );
 
     Widget cell(String text, {Color? color}) => Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Text(text, style: _text.copyWith(color: color), softWrap: false),
+      padding: _cellPadding,
+      child: Text(text, style: _text.copyWith(color: color)),
     );
 
     return Table(
-      // Les colonnes se partagent toute la largeur du tableau.
-      defaultColumnWidth: const FlexColumnWidth(),
+      columnWidths: const {0: IntrinsicColumnWidth(), 1: FlexColumnWidth()},
       border: TableBorder(horizontalInside: divider),
       children: [
-        TableRow(
-          decoration: const BoxDecoration(color: topBarColor),
-          children: [
-            for (final c in table.columns) cell(c, color: headerColor),
-          ],
-        ),
-        for (final row in table.rows)
+        for (final (i, column) in columns.indexed)
           TableRow(
-            decoration: const BoxDecoration(color: topBarColor),
-            children: [for (final v in row) cell(v)],
+            children: [
+              cell(column, color: headerColor),
+              cell(values[i]),
+            ],
           ),
       ],
     );
@@ -99,7 +167,7 @@ class _Message extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Text(text, style: const TextStyle(fontSize: 14)),
+      child: Text(text, style: _text),
     );
   }
 }
