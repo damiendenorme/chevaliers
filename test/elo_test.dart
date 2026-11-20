@@ -55,4 +55,20 @@ void main() {
     ]);
     expect(ranking({}, {1: 'Arthur'}), isEmpty);
   });
+
+  test('playerGames lists only games played, best ELO first, ties by name', () {
+    final elo = {
+      1: {7: 98.0, 8: 102.0},
+      2: {7: 104.4},
+      3: {8: 100.0},
+      4: {7: 98.0},
+    };
+    final games = {1: 'Go', 2: 'Échecs', 3: 'Dames', 4: 'Awalé'};
+    expect(playerGames(elo, 7, games), [
+      ('Échecs', '104'),
+      ('Awalé', '98'),
+      ('Go', '98'),
+    ]);
+    expect(playerGames(elo, 9, games), isEmpty);
+  });
 }

@@ -81,7 +81,7 @@ Future<List<EloGame>> _fetchEloGames(SupabaseClient db) async {
 ///
 /// Pour `partie` : les deux joueurs, leurs scores et le jeu.
 /// Pour `joueur` : le nom et son ELO à chaque jeu auquel il a joué.
-/// Pour `jeu` : le nom et le classement ELO de tous les joueurs.
+/// Pour `jeu` : le nom et le classement ELO des joueurs qui y ont joué.
 /// Pour les autres tables : le nom.
 Future<RowTable> fetchRows(String table) async {
   final db = Supabase.instance.client;
@@ -127,18 +127,12 @@ Future<RowTable> fetchRows(String table) async {
       _fetchEloGames(db),
     ).wait;
     final elo = computeElo(games);
+    final gameNames = {
+      for (final j in boardGames) j['id'] as int: j['nom'] as String,
+    };
     return RowTable(
       lists: [
-        for (final p in players)
-          [
-            // Seulement les jeux auxquels le joueur a joué.
-            for (final j in boardGames)
-              if (elo[j['id'] as int]?.containsKey(p['id'] as int) ?? false)
-                (
-                  'ELO ${j['nom']}',
-                  '${eloOf(elo, j['id'] as int, p['id'] as int)}',
-                ),
-          ],
+        for (final p in players) playerGames(elo, p['id'] as int, gameNames),
       ],
       banners: [for (final p in players) bannerAsset(table, p['id'] as int)],
       columns: const ['Nom'],
@@ -185,6 +179,27 @@ Future<RowTable> fetchRows(String table) async {
   );
 }
 
+/// Jeux auxquels [player] a joué, du meilleur ELO au moins bon, en (nom du
+/// jeu, ELO), avec les noms pris dans [games] (id → nom). À ELO égal, par
+/// nom.
+List<(String, String)> playerGames(
+  Map<int, Map<int, double>> elo,
+  int player,
+  Map<int, String> games,
+) {
+  final played = [
+    for (final MapEntry(key: game, value: ratings) in elo.entries)
+      if (ratings[player] case final rating?) (games[game]!, rating),
+  ]..sort(_byEloThenName);
+  return [for (final (name, rating) in played) (name, '${rating.round()}')];
+}
+
+/// Du meilleur ELO au moins bon ; à ELO égal, par nom.
+int _byEloThenName((String, double) a, (String, double) b) {
+  final byElo = b.$2.compareTo(a.$2);
+  return byElo != 0 ? byElo : a.$1.compareTo(b.$1);
+}
+
 /// Classement ELO d'un jeu : les joueurs qui y ont joué (présents dans
 /// [ratings]), du meilleur au moins bon, en (« rang. nom », ELO), avec leur
 /// nom pris dans [players] (id → nom). À ELO égal, par nom.
@@ -192,14 +207,10 @@ List<(String, String)> ranking(
   Map<int, double> ratings,
   Map<int, String> players,
 ) {
-  final ranked =
-      [
-        for (final MapEntry(key: id, value: elo) in ratings.entries)
-          (players[id]!, elo),
-      ]..sort((a, b) {
-        final byElo = b.$2.compareTo(a.$2);
-        return byElo != 0 ? byElo : a.$1.compareTo(b.$1);
-      });
+  final ranked = [
+    for (final MapEntry(key: id, value: elo) in ratings.entries)
+      (players[id]!, elo),
+  ]..sort(_byEloThenName);
   return [
     for (final (i, (name, elo)) in ranked.indexed)
       ('${i + 1}. $name', '${elo.round()}'),
