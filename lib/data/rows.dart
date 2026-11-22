@@ -281,8 +281,8 @@ typedef SessionDetail = ({
 });
 
 /// Un événement JDR détaillé : ceux qui ont joué à ses parties (comme MJ ou
-/// joueur), avec leur nombre de parties jouées à l'événement.
-typedef EventDetail = ({List<({int id, String name, int parties})> players});
+/// joueur), avec la Gloire gagnée à l'événement.
+typedef EventDetail = ({List<({int id, String name, int glory})> players});
 
 /// Une partie de JDR sur une ligne : son libellé, puis ses MJ et ses joueurs
 /// (id, nom).

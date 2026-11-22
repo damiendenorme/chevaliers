@@ -69,7 +69,7 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
         summary: r['resume'] as String?,
       ),
   ];
-  final glory = rpgGlory([
+  final glorySessions = [
     for (final s in sessions)
       (
         id: s.id,
@@ -78,7 +78,9 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
         event: s.event,
         people: {...s.gms, ...s.guests},
       ),
-  ]);
+  ];
+  final glory = rpgGlory(glorySessions);
+  final sessionPoints = rpgSessionPoints(glorySessions);
 
   // Numéro d'ordre de chaque partie dans son événement (1, 2…), par date.
   final eventOrder = <int, int>{};
@@ -227,7 +229,7 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
                 if (s.event == e['id']) s.id,
             ],
         ],
-        // Ceux qui ont joué à ses parties, avec leur nombre de parties.
+        // Ceux qui ont joué à ses parties, avec leur Gloire à l'événement.
         eventDetails: [
           for (final e in sorted)
             () {
@@ -235,17 +237,18 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
                 for (final s in sessions)
                   if (s.event == e['id']) s,
               ];
-              // Parties jouées à l'événement par chacun (MJ ou joueur).
-              final counts = <int, int>{};
+              // Gloire gagnée à l'événement par chacun (MJ ou joueur) : la
+              // somme des points de ses parties.
+              final glory = <int, int>{};
               for (final s in played) {
                 for (final p in {...s.gms, ...s.guests}) {
-                  counts[p] = (counts[p] ?? 0) + 1;
+                  glory[p] = (glory[p] ?? 0) + sessionPoints[s.id]!;
                 }
               }
               return (
                 players: [
-                  for (final MapEntry(key: id, value: n) in counts.entries)
-                    (id: id, name: nameOf(id), parties: n),
+                  for (final MapEntry(key: id, value: n) in glory.entries)
+                    (id: id, name: nameOf(id), glory: n),
                 ],
               );
             }(),
@@ -308,6 +311,20 @@ typedef GlorySession = ({
 ///
 /// « Première » : par date, puis par id à date égale.
 Map<int, int> rpgGlory(Iterable<GlorySession> sessions) {
+  final points = rpgSessionPoints(sessions);
+  final glory = <int, int>{};
+  for (final s in sessions) {
+    for (final p in s.people) {
+      glory[p] = (glory[p] ?? 0) + points[s.id]!;
+    }
+  }
+  return glory;
+}
+
+/// Gloire rapportée par chaque partie (id → points) à chacun de ceux qui y
+/// étaient : 1, +2 si c'est la première de son événement, +5 si c'est la
+/// première de son jeu (voir [rpgGlory]).
+Map<int, int> rpgSessionPoints(Iterable<GlorySession> sessions) {
   final ordered = [...sessions]
     ..sort((a, b) {
       final byDate = a.date.compareTo(b.date);
@@ -315,16 +332,13 @@ Map<int, int> rpgGlory(Iterable<GlorySession> sessions) {
     });
   final seenGames = <int>{};
   final seenEvents = <int>{};
-  final glory = <int, int>{};
-  for (final s in ordered) {
-    var points = 1;
-    if (seenGames.add(s.game)) points += 5;
-    if (s.event case final e? when seenEvents.add(e)) points += 2;
-    for (final p in s.people) {
-      glory[p] = (glory[p] ?? 0) + points;
-    }
-  }
-  return glory;
+  return {
+    for (final s in ordered)
+      s.id:
+          1 +
+          (seenGames.add(s.game) ? 5 : 0) +
+          (s.event != null && seenEvents.add(s.event!) ? 2 : 0),
+  };
 }
 
 /// « 28.11.2026 La Tombe de M. Eustache (Paris Éternité 1) » : la date, le

@@ -998,13 +998,13 @@ class _SortHeader extends StatelessWidget {
   }
 }
 
-/// Joueurs d'un événement, au style des listes : la bannière de son id et
-/// son nom, à droite son nombre de parties jouées (dans une pastille, comme
-/// les jeux du Wargame). Triable par nom ou par nombre de parties.
+/// Joueurs d'un événement, au style des listes : son nom (précédé de son rang
+/// quand la liste est triée par Gloire), à droite sa Gloire gagnée à
+/// l'événement. Triable par nom ou par Gloire.
 class _EventPlayers extends StatefulWidget {
   const _EventPlayers(this.players, {super.key, this.onTap});
 
-  final List<({int id, String name, int parties})> players;
+  final List<({int id, String name, int glory})> players;
 
   /// Si non nul : chaque joueur est cliquable (son id).
   final ValueChanged<int>? onTap;
@@ -1018,7 +1018,7 @@ class _EventPlayersState extends State<_EventPlayers> {
   bool _ascending = true;
 
   /// Comme les autres en-têtes : la colonne déjà triée inverse le sens ;
-  /// sinon, par nom de A à Z ou par nombre de parties décroissant.
+  /// sinon, par nom de A à Z ou par Gloire décroissante.
   void _sort(_SortBy by) => setState(() {
     _ascending = by == _sortBy ? !_ascending : by == _SortBy.name;
     _sortBy = by;
@@ -1032,12 +1032,25 @@ class _EventPlayersState extends State<_EventPlayers> {
     final players = [...widget.players]
       ..sort((a, b) {
         if (_sortBy == _SortBy.score) {
-          final byCount = a.parties.compareTo(b.parties);
+          final byCount = a.glory.compareTo(b.glory);
           if (byCount != 0) return direction * byCount;
           return compareNames(a.name, b.name);
         }
         return direction * compareNames(a.name, b.name);
       });
+    // Trié par Gloire : le rang de chacun au classement (meilleure Gloire :
+    // 1 ; à égalité, par nom), quel que soit le sens du tri.
+    final Map<int, int>? ranks;
+    if (_sortBy == _SortBy.score) {
+      final ranked = [...widget.players]
+        ..sort((a, b) {
+          final byGlory = b.glory.compareTo(a.glory);
+          return byGlory != 0 ? byGlory : compareNames(a.name, b.name);
+        });
+      ranks = {for (final (r, p) in ranked.indexed) p.id: r + 1};
+    } else {
+      ranks = null;
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1053,7 +1066,7 @@ class _EventPlayersState extends State<_EventPlayers> {
                 ),
               ),
               _SortHeader(
-                'Parties',
+                'Gloire',
                 arrow: _sortBy == _SortBy.score ? _ascending : null,
                 onTap: () => _sort(_SortBy.score),
                 arrowPlacement: _ArrowPlacement.before,
@@ -1070,16 +1083,26 @@ class _EventPlayersState extends State<_EventPlayers> {
             child: Row(
               spacing: 10,
               children: [
-                _IdBanner(p.id),
                 Expanded(
                   child: Text(
-                    p.name,
+                    switch (ranks?[p.id]) {
+                      final rank? => '$rank. ${p.name}',
+                      null => p.name,
+                    },
                     style: _text,
                     softWrap: false,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                _Badge(p.parties, style: _text),
+                // Sa Gloire à l'événement, alignée comme les scores.
+                SizedBox(
+                  width: _scoreWidth,
+                  child: Text(
+                    '${p.glory}',
+                    style: _text,
+                    textAlign: TextAlign.right,
+                  ),
+                ),
               ],
             ),
           ),

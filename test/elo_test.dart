@@ -197,4 +197,22 @@ void main() {
     expect(glory[3], 1 + 1); // 1, puis 1
     expect(glory[4], isNull); // aucune partie
   });
+
+  test('rpgSessionPoints: the Glory each party brings', () {
+    GlorySession party(int id, int day, int game, int? event) => (
+      id: id,
+      date: DateTime(2026, 11, day),
+      game: game,
+      event: event,
+      people: const {1},
+    );
+    expect(
+      rpgSessionPoints([
+        party(2, 20, 1, 7), // ni 1re du jeu, ni de l'événement
+        party(1, 10, 1, 7), // 1re du jeu (+5) et de l'événement (+2)
+        party(3, 25, 2, 7), // 1re du jeu 2 (+5)
+      ]),
+      {1: 8, 2: 1, 3: 6},
+    );
+  });
 }

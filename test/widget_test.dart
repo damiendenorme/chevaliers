@@ -1431,7 +1431,7 @@ void main() {
     expect(p.date, DateUtils.dateOnly(DateTime.now()));
   });
 
-  testWidgets('An RPG event detail lists players and their party counts', (
+  testWidgets('An RPG event detail lists players and their event Glory', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1400, 800);
@@ -1450,9 +1450,9 @@ void main() {
             eventDetails: const [
               (
                 players: [
-                  (id: 1, name: 'Pokinano', parties: 2),
-                  (id: 6, name: 'Andracifus', parties: 5),
-                  (id: 2, name: 'Irongab', parties: 1),
+                  (id: 1, name: 'Pokinano', glory: 2),
+                  (id: 6, name: 'Andracifus', glory: 5),
+                  (id: 2, name: 'Irongab', glory: 1),
                 ],
               ),
             ],
@@ -1486,8 +1486,8 @@ void main() {
       greaterThan(tester.getRect(find.text('Pokinano')).bottom),
     );
     expect(find.text('MJ'), findsNothing);
-    // À droite de chaque ligne : le nombre de parties jouées.
-    final name = tester.getRect(find.text('Andracifus'));
+    // À droite de chaque ligne : sa Gloire à l'événement.
+    final name = tester.getRect(find.textContaining('Andracifus'));
     final count = tester.getRect(find.text('5'));
     expect(count.left, greaterThan(name.right));
     expect(count.center.dy, moreOrLessEquals(name.center.dy, epsilon: 2));
@@ -1495,25 +1495,34 @@ void main() {
     List<String> order() => ['Andracifus', 'Irongab', 'Pokinano']
       ..sort(
         (a, b) => tester
-            .getRect(find.text(a))
+            .getRect(find.textContaining(a))
             .top
-            .compareTo(tester.getRect(find.text(b)).top),
+            .compareTo(tester.getRect(find.textContaining(b)).top),
       );
     final partiesHeader = find.descendant(
       of: find.byType(RowList),
-      matching: find.text('Parties'),
+      matching: find.text('Gloire'),
     );
     final nameHeaders = find.descendant(
       of: find.byType(RowList),
       matching: find.text('Nom'),
     );
 
-    // Par nom au départ ; par nombre de parties (décroissant, puis
-    // croissant) ; retour au nom.
+    // Par nom au départ ; par Gloire (décroissante, puis croissante) ;
+    // retour au nom.
     expect(order(), ['Andracifus', 'Irongab', 'Pokinano']);
+    // Sans bannière d'id dans la liste des joueurs : celle d'Andracifus (6)
+    // n'apparaît plus que dans la liste des parties, dessous. Sans rang tant
+    // que la liste est triée par nom.
+    expect(find.text('6'), findsOneWidget);
+    expect(find.text('Andracifus'), findsOneWidget);
     await tester.tap(partiesHeader);
     await tester.pump();
     expect(order(), ['Andracifus', 'Pokinano', 'Irongab']);
+    // Triée par Gloire : le rang devant chaque nom.
+    expect(find.text('1. Andracifus'), findsOneWidget);
+    expect(find.text('2. Pokinano'), findsOneWidget);
+    expect(find.text('3. Irongab'), findsOneWidget);
     await tester.tap(partiesHeader);
     await tester.pump();
     expect(order(), ['Irongab', 'Pokinano', 'Andracifus']);
@@ -2172,7 +2181,7 @@ void main() {
                 ['Paris Éternité'],
               ],
               eventDetails: [
-                (players: [(id: 2, name: 'Morgane', parties: 1)]),
+                (players: [(id: 2, name: 'Morgane', glory: 1)]),
               ],
               sessionLines: [
                 [line],
