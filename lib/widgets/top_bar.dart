@@ -26,7 +26,8 @@ const lightShadow = [
 
 /// Bordure en bourrelet bronze, en relief, identique sur tout le tour (pas
 /// de lumière projetée) : un centre clair entre deux bords sombres, comme un
-/// jonc arrondi. Dessinée par-dessus [child], sans le décaler.
+/// jonc arrondi, avec une ombre portée interne en haut. Dessinée par-dessus
+/// [child], sans le décaler.
 class BevelEdge extends StatelessWidget {
   const BevelEdge({super.key, required this.child, this.radius = 8});
 
@@ -54,9 +55,28 @@ class _BevelPainter extends CustomPainter {
     (1.0, Color(0xFF4A3822)),
   ];
 
+  /// Hauteur de l'ombre portée interne, en haut.
+  static const _shadowHeight = 14.0;
+
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
+    // Ombre portée interne en haut : du noir qui s'efface vers le bas, sous
+    // le bourrelet, dans les coins arrondis.
+    canvas.save();
+    canvas.clipRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius)));
+    final shadow = Rect.fromLTWH(0, 0, size.width, _shadowHeight);
+    canvas.drawRect(
+      shadow,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0x99000000), Color(0x00000000)],
+        ).createShader(shadow),
+    );
+    canvas.restore();
+
     var inset = 0.0;
     for (final (width, color) in _rings) {
       final middle = inset + width / 2;
