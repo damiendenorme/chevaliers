@@ -84,8 +84,8 @@ class RowTable {
 
   DateTime? date(int index) => dates?[index];
 
-  /// Chemin d'asset de l'image de bannière de chaque ligne (voir
-  /// [bannerAsset]). Le fichier peut ne pas exister.
+  /// Chemin d'asset de l'image de bannière de chaque ligne, sans extension
+  /// (voir [bannerAsset]). Le fichier peut ne pas exister.
   final List<String?>? banners;
 
   String? banner(int index) => banners?[index];
@@ -189,8 +189,26 @@ List<MatchDetail> _matchDetails({
   ];
 }
 
-/// Chemin d'asset de la bannière d'une ligne : `assets/bannieres/<table>/<id>.jpg`.
-String bannerAsset(String table, int id) => 'assets/bannieres/$table/$id.jpg';
+/// Chemin d'asset de la bannière d'une ligne, sans extension :
+/// `assets/bannieres/<table>/<id>`. Le fichier peut être en .jpg, .jpeg ou
+/// .png (voir [resolveImageAsset]).
+String bannerAsset(String table, int id) => 'assets/bannieres/$table/$id';
+
+/// Extensions d'image reconnues, dans l'ordre de préférence.
+const imageExtensions = ['jpg', 'jpeg', 'png'];
+
+/// Fichier de [assets] (la liste des assets de l'app) qui correspond à
+/// [base] avec une extension d'image reconnue, quelle que soit la casse de
+/// l'extension. Null s'il n'y en a pas.
+String? resolveImageAsset(String base, Iterable<String> assets) {
+  final byLowerCase = {for (final a in assets) a.toLowerCase(): a};
+  for (final ext in imageExtensions) {
+    if (byLowerCase['${base.toLowerCase()}.$ext'] case final found?) {
+      return found;
+    }
+  }
+  return null;
+}
 
 /// Toutes les parties, dans l'ordre chronologique, pour le calcul du ELO,
 /// avec le lieu, la date et l'id de chacune (même ordre).

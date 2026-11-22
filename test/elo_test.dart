@@ -129,4 +129,24 @@ void main() {
     expect(formatMonth(DateTime(2027, 12)), 'Décembre 2027');
     expect(formatMonth(DateTime(2026, 8, 15)), 'Août 2026');
   });
+
+  test('resolveImageAsset finds a .jpg, .jpeg or .png banner', () {
+    const assets = [
+      'assets/bannieres/jeu/1.jpg',
+      'assets/bannieres/jeu/2.JPEG',
+      'assets/bannieres/jeu/3.png',
+      'assets/bannieres/jeu/4.png',
+      'assets/bannieres/jeu/4.jpg',
+      'assets/bannieres/jeu/5.gif',
+    ];
+    String? find(int id) => resolveImageAsset(bannerAsset('jeu', id), assets);
+    expect(find(1), 'assets/bannieres/jeu/1.jpg');
+    expect(find(2), 'assets/bannieres/jeu/2.JPEG');
+    expect(find(3), 'assets/bannieres/jeu/3.png');
+    expect(find(4), 'assets/bannieres/jeu/4.jpg'); // .jpg avant .png
+    expect(find(5), isNull);
+    expect(find(6), isNull);
+    // 10 ne doit pas trouver 1.
+    expect(resolveImageAsset(bannerAsset('jeu', 10), assets), isNull);
+  });
 }

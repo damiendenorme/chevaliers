@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../data/rows.dart';
 import 'top_bar.dart';
@@ -616,18 +617,37 @@ class _Badge extends StatelessWidget {
   }
 }
 
-/// Bannière en haut du détail : l'image (asset) de la ligne sur toute la
-/// largeur, en fondu vers le transparent en bas. Sans fichier, un bandeau
+/// Bannière en haut du détail : l'image (asset en .jpg, .jpeg ou .png) de la
+/// ligne sur toute la largeur, en fondu vers le transparent en bas. Sans fichier, un bandeau
 /// vide de même taille.
 class _Banner extends StatelessWidget {
-  const _Banner(this.asset);
+  const _Banner(this.base);
 
   static const double height = 160;
 
-  final String? asset;
+  /// Chemin de l'image sans extension (voir [bannerAsset]).
+  final String? base;
+
+  /// Liste des assets de l'app, chargée une seule fois.
+  static final Future<List<String>> _assets = AssetManifest.loadFromAssetBundle(
+    rootBundle,
+  ).then((m) => m.listAssets());
 
   @override
   Widget build(BuildContext context) {
+    return FutureBuilder<List<String>>(
+      future: _assets,
+      builder: (context, snapshot) {
+        final assets = snapshot.data;
+        final asset = base == null || assets == null
+            ? null
+            : resolveImageAsset(base!, assets);
+        return _faded(context, asset);
+      },
+    );
+  }
+
+  Widget _faded(BuildContext context, String? asset) {
     final empty = ColoredBox(color: Theme.of(context).scaffoldBackgroundColor);
     // Fondu vers le transparent en allant vers le bas : la bannière se fond
     // dans le fond de la carte.
@@ -644,7 +664,7 @@ class _Banner extends StatelessWidget {
         child: asset == null
             ? empty
             : Image.asset(
-                asset!,
+                asset,
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => empty,
               ),
