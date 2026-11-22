@@ -771,9 +771,23 @@ void main() {
     await tester.pump(Bookmark.duration ~/ 3);
     final rpgDuring = tester.getRect(find.byType(Bookmark).last).width;
     expect(rpgDuring, greaterThan(rpgBefore));
+    Color? hoverOf(String label) => tester
+        .widget<InkWell>(
+          find.descendant(
+            of: find.ancestor(of: find.text(label), matching: bookmarks),
+            matching: find.byType(InkWell),
+          ),
+        )
+        .hoverColor;
+    // Pendant l'animation, le survol est encore là.
+    expect(hoverOf('RPG'), isNot(Colors.transparent));
     await tester.pumpAndSettle();
     expect(bookmarkOf('RPG').width, greaterThan(rpgDuring - 1));
     expect(active('RPG'), isTrue);
+    // À la fin de l'animation, plus de survol sur le marque-page tiré ;
+    // l'autre le retrouve.
+    expect(hoverOf('RPG'), Colors.transparent);
+    expect(hoverOf('Wargame'), isNot(Colors.transparent));
     expect(active('Wargame'), isFalse);
     expect(horizontal('RPG'), isTrue);
     expect(horizontal('Wargame'), isFalse);
@@ -825,6 +839,36 @@ void main() {
     await tester.tap(find.text('Jeux'));
     await tester.pump();
     expect(wargame, ['partie', 'jeu']);
+
+    // Élément choisi (menu, liste) : pas de survol, son fond reste visible.
+    Color? hoverIn(Finder item, Type type) => tester
+        .widget<InkWell>(
+          find
+              .descendant(
+                of: find.ancestor(of: item, matching: find.byType(type)).first,
+                matching: find.byType(InkWell),
+              )
+              .first,
+        )
+        .hoverColor;
+    expect(hoverIn(find.text('Jeux'), SectionButton), Colors.transparent);
+    expect(
+      hoverIn(find.text('Joueurs'), SectionButton),
+      isNot(Colors.transparent),
+    );
+    Color? rowHover() => tester
+        .widget<InkWell>(
+          find.ancestor(
+            of: find.text('Arthur'),
+            matching: find.byType(InkWell),
+          ),
+        )
+        .hoverColor;
+    await tester.pump(); // Chargement de la liste des jeux.
+    expect(rowHover(), isNot(Colors.transparent));
+    await tester.tap(find.text('Arthur'));
+    await tester.pump();
+    expect(rowHover(), Colors.transparent);
 
     // RPG : sa page, avec ses données et ses nombres, au même design.
     await tester.tap(find.text('RPG'));

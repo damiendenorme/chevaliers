@@ -96,9 +96,14 @@ class SectionButton extends StatelessWidget {
       // Actif : le fond texturé doré.
       child: Ink(
         decoration: active ? AccentStyle.of(context).texture : null,
+        // Actif : pas de survol, son fond reste visible. La clé recrée l'encre
+        // au changement d'état : un survol déjà affiché disparaît.
         child: InkWell(
+          key: ValueKey(active),
           onTap: onPressed,
-          hoverColor: AccentStyle.of(context).hover,
+          hoverColor: active
+              ? Colors.transparent
+              : AccentStyle.of(context).hover,
           // Actif : en creux, comme le marque-page choisi (ombre portée
           // interne en haut).
           child: DecoratedBox(

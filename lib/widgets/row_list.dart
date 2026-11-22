@@ -196,9 +196,14 @@ class _MasterDetailState extends State<_MasterDetail> {
                 decoration: i == _selected
                     ? AccentStyle.of(context).texture
                     : null,
+                // Choisie : pas de survol, son fond reste visible. La clé
+                // recrée l'encre au changement : un survol affiché disparaît.
                 child: InkWell(
+                  key: ValueKey(i == _selected),
                   onTap: () => setState(() => _selected = i),
-                  hoverColor: AccentStyle.of(context).hover,
+                  hoverColor: i == _selected
+                      ? Colors.transparent
+                      : AccentStyle.of(context).hover,
                   // Choisie : en creux, comme le libellé actif de la barre
                   // (ombre portée interne en haut).
                   child: DecoratedBox(

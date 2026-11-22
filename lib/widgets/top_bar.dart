@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -184,7 +186,7 @@ class Plate extends StatelessWidget {
 /// l'écran, seuls son bout et ses coins droits, arrondis, sont visibles.
 /// Actif, il est coloré comme la ligne choisie d'une liste, plus large et en
 /// creux ; inactif, il est gris et bombé.
-class Bookmark extends StatelessWidget {
+class Bookmark extends StatefulWidget {
   const Bookmark({
     super.key,
     required this.label,
@@ -222,9 +224,42 @@ class Bookmark extends StatelessWidget {
   final bool active;
 
   @override
+  State<Bookmark> createState() => _BookmarkState();
+}
+
+class _BookmarkState extends State<Bookmark> {
+  /// Survol désactivé : le marque-page actif, une fois tiré, n'a plus rien
+  /// à proposer au clic.
+  late bool _hoverOff = widget.active;
+  Timer? _timer;
+
+  @override
+  void didUpdateWidget(Bookmark old) {
+    super.didUpdateWidget(old);
+    if (widget.active == old.active) return;
+    _timer?.cancel();
+    if (widget.active) {
+      // Le survol disparaît à la fin de l'animation.
+      _timer = Timer(Bookmark.duration, () {
+        if (mounted) setState(() => _hoverOff = true);
+      });
+    } else {
+      _hoverOff = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final visible = active ? activeWidth : inactiveWidth;
-    final total = visible + _hidden;
+    final active = widget.active;
+    final accent = widget.accent;
+    final visible = active ? Bookmark.activeWidth : Bookmark.inactiveWidth;
+    final total = visible + Bookmark._hidden;
     // Actif : bourrelet et survol aux couleurs de sa page ; inactif : gris.
     final style = active ? accent : AccentStyle.inactive;
     final color = active
@@ -235,9 +270,9 @@ class Bookmark extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: 6,
       children: [
-        Text(label, style: TextStyle(fontSize: 14, color: color)),
+        Text(widget.label, style: TextStyle(fontSize: 14, color: color)),
         SvgPicture.asset(
-          icon,
+          widget.icon,
           width: 18,
           height: 18,
           colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
@@ -247,14 +282,14 @@ class Bookmark extends StatelessWidget {
     return AccentScope(
       style: style,
       child: Transform.translate(
-        offset: const Offset(-_hidden, 0),
+        offset: const Offset(-Bookmark._hidden, 0),
         // Tiré (actif) : il s'élargit, avec un léger dépassement comme un
         // geste de la main ; repoussé : il se rétracte.
         child: AnimatedContainer(
-          duration: duration,
+          duration: Bookmark.duration,
           curve: active ? Curves.easeOutBack : Curves.easeInOutCubic,
           width: total,
-          height: height,
+          height: Bookmark.height,
           child: Semantics(
             button: true,
             selected: active,
@@ -275,17 +310,26 @@ class Bookmark extends StatelessWidget {
                               Color(0x00FFFFFF),
                               Color(0x66000000),
                             ],
-                            stops: [_hidden / total, 0.55, 0.75, 1],
+                            stops: [Bookmark._hidden / total, 0.55, 0.75, 1],
                           ),
                         ),
+                  // Survol coupé une fois actif et l'animation terminée : son
+                  // fond reste visible. La clé recrée l'encre à ce moment-là,
+                  // pour effacer le survol déjà affiché.
                   child: InkWell(
-                    onTap: onPressed,
-                    hoverColor: style.hover,
+                    key: ValueKey(_hoverOff),
+                    onTap: widget.onPressed,
+                    hoverColor: _hoverOff ? Colors.transparent : style.hover,
                     // Son nom puis son icône sur une ligne, centrée dans la
                     // partie visible : à l'horizontale s'il est actif, tournée
                     // à la verticale (lue de bas en haut) sinon.
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(_hidden, 16, 0, 16),
+                      padding: const EdgeInsets.fromLTRB(
+                        Bookmark._hidden,
+                        16,
+                        0,
+                        16,
+                      ),
                       // La ligne tourne d'un quart de tour pendant
                       // l'animation : de la verticale à l'horizontale quand
                       // on le tire, et inversement. Elle garde sa taille,
@@ -296,7 +340,7 @@ class Bookmark extends StatelessWidget {
                           maxHeight: double.infinity,
                           child: AnimatedRotation(
                             turns: active ? 0 : -0.25,
-                            duration: duration,
+                            duration: Bookmark.duration,
                             curve: active
                                 ? Curves.easeOutBack
                                 : Curves.easeInOutCubic,
