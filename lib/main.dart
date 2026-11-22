@@ -62,32 +62,37 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  /// Boutons au-dessus des tableaux : icône, libellé et table affichée au clic.
+  /// Boutons au-dessus des tableaux : libellé et table affichée au clic.
   static const _sections = [
-    (Icons.person, 'Joueurs', 'joueur'),
-    (Icons.confirmation_number, 'Événements', 'evenement'),
-    (Icons.flag, 'Parties', 'partie'),
-    (Icons.casino, 'Jeux', 'jeu'),
+    ('Joueurs', 'joueur'),
+    ('Événements', 'evenement'),
+    ('Parties', 'partie'),
+    ('Jeux', 'jeu'),
   ];
 
   // Distances mesurées depuis le haut de la zone (sous sa marge de 12px).
   // Boutons et tableau se règlent indépendamment.
 
-  /// Haut de la rangée de boutons.
+  /// Haut de la barre des boutons.
   static const double _buttonsTop = 52;
 
-  /// Écart entre les boutons et le tableau.
-  static const double _tableGap = 20;
+  /// Écart entre la barre des boutons et le tableau : le même qu'entre les
+  /// deux cartes.
+  static const double _tableGap = RowList.gap;
 
   /// Section affichée au démarrage : les parties.
   static const _startSection = 2;
 
+  /// Section affichée, dont le bouton est actif.
+  int _active = _startSection;
+
   /// Lignes de la table affichée.
-  late Future<RowTable> _rows = widget.loadRows(_sections[_startSection].$3);
+  late Future<RowTable> _rows = widget.loadRows(_sections[_startSection].$2);
 
   void _showTable(int index) {
-    final rows = widget.loadRows(_sections[index].$3);
+    final rows = widget.loadRows(_sections[index].$2);
     setState(() {
+      _active = index;
       _rows = rows;
     });
   }
@@ -126,12 +131,14 @@ class _MyHomePageState extends State<MyHomePage> {
                       child: Column(
                         children: [
                           const SizedBox(height: _buttonsTop),
-                          SectionButtons(
-                            buttons: [
-                              for (final (icon, label, _) in _sections)
-                                (icon, label),
-                            ],
-                            onPressed: _showTable,
+                          SectionBar(
+                            child: SectionButtons(
+                              buttons: [
+                                for (final (label, _) in _sections) label,
+                              ],
+                              active: _active,
+                              onPressed: _showTable,
+                            ),
                           ),
                           const SizedBox(height: _tableGap),
                           Expanded(

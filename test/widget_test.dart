@@ -6,6 +6,7 @@ import 'package:chevaliers/data/rows.dart';
 import 'package:chevaliers/main.dart';
 import 'package:chevaliers/widgets/row_list.dart';
 import 'package:chevaliers/widgets/section_buttons.dart';
+import 'package:chevaliers/widgets/top_bar.dart';
 
 void main() {
   testWidgets('No header or footer; the table scrolls, not the screen', (
@@ -32,12 +33,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Joueur 0'), findsOneWidget);
 
-    // Boutons à 12 + 52px du haut de l'écran ; pied du tableau à la même
-    // distance du bas.
+    // Barre des boutons à 12 + 52px du haut de l'écran ; pied du tableau à
+    // la même distance du bas.
+    final barTop = tester.getRect(find.byType(SectionBar)).top;
     final buttonsTop = tester.getRect(find.byType(SectionButton).first).top;
     final tableBox = tester.getRect(find.byType(RowList));
-    expect(buttonsTop, screen.top + 12 + 52);
-    expect(screen.bottom - tableBox.bottom, buttonsTop - screen.top);
+    expect(barTop, screen.top + 12 + 52);
+    expect(screen.bottom - tableBox.bottom, barTop - screen.top);
 
     // C'est la liste qui défile, pas l'écran.
     final firstRowBefore = tester.getRect(find.text('Joueur 0')).top;
@@ -48,7 +50,7 @@ void main() {
     expect(tester.getRect(find.byType(SectionButton).first).top, buttonsTop);
   });
 
-  testWidgets('Round buttons form a horizontal row above the tables', (
+  testWidgets('Label buttons form a horizontal row above the tables', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -64,18 +66,13 @@ void main() {
     expect(buttons, findsNWidgets(4));
 
     final rects = [for (var i = 0; i < 4; i++) tester.getRect(buttons.at(i))];
-    final icons = [
-      Icons.person,
-      Icons.confirmation_number,
-      Icons.flag,
-      Icons.casino,
-    ];
+    const labels = ['Joueurs', 'Événements', 'Parties', 'Jeux'];
+    expect(find.byType(Icon), findsNothing);
     for (var i = 0; i < 4; i++) {
       expect(
-        find.descendant(of: buttons.at(i), matching: find.byIcon(icons[i])),
+        find.descendant(of: buttons.at(i), matching: find.text(labels[i])),
         findsOneWidget,
       );
-      expect(rects[i].width, rects[i].height);
       expect(rects[i].top, rects[0].top);
       if (i > 0) expect(rects[i].left, greaterThan(rects[i - 1].right));
     }
@@ -122,7 +119,23 @@ void main() {
       ),
     );
     await tester.pump();
-    // Au démarrage : la liste des parties.
+    // Au démarrage : la liste des parties, son bouton actif.
+    // Bouton actif : fond bleu et texte blanc, comme la ligne choisie de la
+    // liste.
+    bool isActive(String label) {
+      final button = find.ancestor(
+        of: find.text(label),
+        matching: find.byType(SectionButton),
+      );
+      final material = tester.widget<Material>(
+        find.descendant(of: button, matching: find.byType(Material)).first,
+      );
+      final text = tester.widget<Text>(find.text(label));
+      return material.color == accentColor && text.style?.color == Colors.white;
+    }
+
+    expect(isActive('Parties'), isTrue);
+    expect(isActive('Joueurs'), isFalse);
     expect(requested, ['partie']);
     expect(find.text('–'), findsOneWidget);
     expect(find.text('Lancelot'), findsOneWidget);
@@ -131,6 +144,8 @@ void main() {
 
     await tester.tap(buttons.at(0));
     await tester.pumpAndSettle();
+    expect(isActive('Joueurs'), isTrue);
+    expect(isActive('Parties'), isFalse);
     // La liste à gauche ; rien à droite tant qu'aucune ligne n'est choisie.
     expect(find.text('Arthur'), findsOneWidget);
     expect(find.text('Lancelot'), findsOneWidget);
@@ -160,17 +175,23 @@ void main() {
     // Bannière de 160px en haut du détail, sur toute sa largeur.
     expect(label.top, greaterThanOrEqualTo(playersTable.top + 160));
 
-    // Boutons centrés sur le tableau, restés à leur place (52px + 12px sous
-    // le haut de l'écran).
+    // Barre blanche des boutons alignée sur les bords des deux cartes,
+    // restée à sa place (52px + 12px sous le haut de l'écran) ; boutons
+    // centrés dedans.
+    final bar = tester.getRect(find.byType(SectionBar));
+    expect(bar.left, playersTable.left);
+    expect(bar.right, playersTable.right);
+    expect(bar.top, 12 + 52);
     final firstButton = tester.getRect(buttons.at(0));
     final lastButton = tester.getRect(buttons.at(3));
     expect(
       (firstButton.left + lastButton.right) / 2,
       moreOrLessEquals(playersTable.center.dx),
     );
-    expect(firstButton.top, 12 + 52);
-    // Tableau 20px sous les boutons.
-    expect(playersTable.top - firstButton.bottom, 20);
+    expect(firstButton.top, bar.top + SectionBar.padding);
+    expect(firstButton.bottom, bar.bottom - SectionBar.padding);
+    // Tableau sous la barre, au même écart qu'entre les deux cartes.
+    expect(playersTable.top - bar.bottom, RowList.gap);
 
     // Changer de table vide le détail.
     await tester.tap(buttons.at(2));
@@ -268,7 +289,7 @@ void main() {
     expect(find.text('Nom'), findsNothing);
   });
 
-  testWidgets('Hovering a button does not animate it or show its label', (
+  testWidgets('Hovering a button does not animate or resize it', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -276,11 +297,7 @@ void main() {
         home: Scaffold(
           body: Align(
             alignment: Alignment.topLeft,
-            child: SectionButton(
-              icon: Icons.person,
-              label: 'Joueurs',
-              onPressed: () {},
-            ),
+            child: SectionButton(label: 'Joueurs', onPressed: () {}),
           ),
         ),
       ),
@@ -294,7 +311,7 @@ void main() {
     await tester.pump();
 
     expect(tester.getRect(button), before);
-    expect(find.text('Joueurs'), findsNothing);
+    expect(find.text('Joueurs'), findsOneWidget);
     expect(find.byType(Tooltip), findsNothing);
     expect(find.byType(AnimatedSize), findsNothing);
   });
