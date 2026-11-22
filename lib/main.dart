@@ -45,6 +45,8 @@ class MyApp extends StatelessWidget {
       title: 'Les Chevaliers',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
+        // Police de toute l'app : Cinzel, capitales romaines.
+        fontFamily: 'Cinzel',
         // Thème sombre, aux tons chauds (bronze) : texte clair sur les cartes
         // sombres.
         colorScheme: .fromSeed(

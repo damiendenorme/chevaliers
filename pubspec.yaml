@@ -58,6 +58,14 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Police de l'app (licence OFL : assets/fonts/OFL-Cinzel.txt).
+  fonts:
+    - family: Cinzel
+      fonts:
+        - asset: assets/fonts/Cinzel-Regular.ttf
+        - asset: assets/fonts/Cinzel-Bold.ttf
+          weight: 700
+
   # Bannières du détail : assets/bannieres/<table>/<id>.jpg
   assets:
     - assets/Table.jpg
