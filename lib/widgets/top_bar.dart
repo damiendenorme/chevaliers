@@ -94,6 +94,29 @@ class CardSurface extends StatelessWidget {
   }
 }
 
+/// Plaque au design de l'encoche du haut (fond sombre, bourrelet bronze,
+/// ombre), posée librement : ses quatre coins sont arrondis.
+class Plate extends StatelessWidget {
+  const Plate({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return BevelEdge(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: topBarColor,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: lightShadow,
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
 /// Marque-page accroché au bord gauche de l'écran, au design des cartes,
 /// avec son texte vertical (de bas en haut) : son côté gauche dépasse de
 /// l'écran, seuls son bout et ses coins droits, arrondis, sont visibles.

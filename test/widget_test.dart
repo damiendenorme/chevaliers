@@ -30,7 +30,16 @@ void main() {
     );
     await tester.pump();
     expect(find.text('Les Chevaliers'), findsNothing);
-    expect(find.text('Discord'), findsNothing);
+    // « Discord » : seulement dans sa plaque, en haut à droite.
+    expect(
+      find.descendant(of: find.byType(Plate), matching: find.text('Discord')),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.discord), findsOneWidget);
+    final plate = tester.getRect(find.byType(Plate));
+    final screenRect = tester.getRect(find.byType(MyHomePage));
+    expect(plate.top, screenRect.top + 12);
+    expect(plate.right, screenRect.right - 12);
 
     final screen = tester.getRect(find.byType(MyHomePage));
     await tester.tap(find.byType(SectionButton).first);

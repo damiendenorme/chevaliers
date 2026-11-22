@@ -221,6 +221,21 @@ class _MyHomePageState extends State<MyHomePage> {
                 ],
               ),
             ),
+            // En haut à droite, à l'écart des bords : Discord.
+            const Positioned(
+              top: 12,
+              right: 12,
+              child: Plate(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 8,
+                  children: [
+                    Icon(Icons.discord, size: 18),
+                    Text('Discord', style: TextStyle(fontSize: 14)),
+                  ],
+                ),
+              ),
+            ),
             // Encoche contre le bord du haut de l'écran : les nombres de
             // joueurs, d'événements, de parties et de jeux.
             Align(
