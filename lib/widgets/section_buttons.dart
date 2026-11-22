@@ -49,20 +49,18 @@ class SectionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: padding, horizontal: 8),
-      decoration: BoxDecoration(
-        color: topBarColor,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: lightShadow,
+    // Bourrelet dessiné par-dessus : il ne décale pas les boutons.
+    return BevelEdge(
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: padding, horizontal: 8),
+        decoration: BoxDecoration(
+          color: topBarColor,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: lightShadow,
+        ),
+        child: Center(child: child),
       ),
-      // Liseré dessiné par-dessus : il ne décale pas les boutons.
-      foregroundDecoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: edgeColor),
-      ),
-      child: Center(child: child),
     );
   }
 }

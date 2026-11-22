@@ -79,8 +79,8 @@ class _Cards extends StatelessWidget {
   }
 }
 
-/// Carte sur l'image Carte assombrie, à coins arrondis, liseré bronze et
-/// légère ombre ; son contenu
+/// Carte sur l'image Carte assombrie, à coins arrondis, bourrelet bronze en
+/// relief et légère ombre ; son contenu
 /// (ligne active, survol) est découpé avec.
 class _Card extends StatelessWidget {
   const _Card(this.child);
@@ -91,16 +91,11 @@ class _Card extends StatelessWidget {
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(8);
     // L'ombre est posée hors du découpage, pour ne pas être coupée ; le
-    // liseré bronze par-dessus le contenu.
+    // bourrelet bronze par-dessus le contenu.
     return DecoratedBox(
       decoration: BoxDecoration(borderRadius: radius, boxShadow: lightShadow),
       position: DecorationPosition.background,
-      child: DecoratedBox(
-        position: DecorationPosition.foreground,
-        decoration: BoxDecoration(
-          borderRadius: radius,
-          border: Border.all(color: edgeColor),
-        ),
+      child: BevelEdge(
         child: ClipRRect(
           borderRadius: radius,
           // Fond : l'image Carte, assombrie pour garder le texte clair
