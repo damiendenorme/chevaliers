@@ -82,6 +82,15 @@ class _Cards extends StatelessWidget {
 
 const _text = TextStyle(fontSize: 14);
 
+/// Ombre portée interne en haut d'un élément choisi de la liste : il paraît
+/// légèrement en creux.
+const _insetShadow = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0x4D000000), Color(0x00000000)],
+  stops: [0, 0.3],
+);
+
 /// Largeur des colonnes de scores ELO (4 chiffres), alignés à droite.
 const double _scoreWidth = 44;
 const _cellPadding = EdgeInsets.symmetric(horizontal: 12, vertical: 4);
@@ -172,20 +181,32 @@ class _MasterDetailState extends State<_MasterDetail> {
         children: [
           for (final i in _order(table))
             Material(
-              // Transparente : le fond de la carte reste visible.
-              color: i == _selected ? accentColor : Colors.transparent,
+              // Transparente : le fond de la carte reste visible. Choisie :
+              // le fond texturé doré.
+              color: Colors.transparent,
               shape: Border(bottom: divider),
-              child: InkWell(
-                onTap: () => setState(() => _selected = i),
-                hoverColor: hoverColor,
-                child: Padding(
-                  padding: _cellPadding,
-                  child: _MasterLine(
-                    table,
-                    i,
-                    style: i == _selected
-                        ? _text.copyWith(color: Colors.white)
-                        : _text,
+              child: Ink(
+                decoration: i == _selected ? accentTexture : null,
+                child: InkWell(
+                  onTap: () => setState(() => _selected = i),
+                  hoverColor: hoverColor,
+                  // Choisie : en creux, comme le libellé actif de la barre
+                  // (ombre portée interne en haut).
+                  child: DecoratedBox(
+                    position: DecorationPosition.foreground,
+                    decoration: i == _selected
+                        ? const BoxDecoration(gradient: _insetShadow)
+                        : const BoxDecoration(),
+                    child: Padding(
+                      padding: _cellPadding,
+                      child: _MasterLine(
+                        table,
+                        i,
+                        style: i == _selected
+                            ? _text.copyWith(color: Colors.white)
+                            : _text,
+                      ),
+                    ),
                   ),
                 ),
               ),

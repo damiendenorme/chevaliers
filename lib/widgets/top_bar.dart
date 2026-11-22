@@ -12,8 +12,19 @@ const edgeColor = Color(0xFF5A4630);
 const dividerColor = Color(0xFF3A3532);
 
 /// Couleur des éléments actifs : marron sombre, comme le bois de l'image de
-/// fond, avec le texte en blanc.
-const accentColor = Color(0xFF5C3A1E);
+/// Couleur des éléments actifs : bronze doré, avec le texte en blanc.
+const accentColor = Color(0xFF8C6A2E);
+
+/// Fond texturé des éléments actifs : la pierre de l'image Carte teintée de
+/// [accentColor] (ses veines restent sombres), dans l'esprit des cartes.
+const accentTexture = BoxDecoration(
+  color: accentColor,
+  image: DecorationImage(
+    image: AssetImage('assets/Carte.jpg'),
+    fit: BoxFit.cover,
+    colorFilter: ColorFilter.mode(accentColor, BlendMode.multiply),
+  ),
+);
 
 /// Couleur des survols : brun, dans les tons de l'accent mais plus discret,
 /// pour garder le texte clair lisible.
@@ -113,12 +124,10 @@ class Bookmark extends StatelessWidget {
           child: CardSurface(
             inset: active,
             Material(
-              color: active
-                  ? accentColor.withValues(alpha: 0.85)
-                  : Colors.transparent,
+              color: Colors.transparent,
               child: Ink(
                 decoration: active
-                    ? null
+                    ? accentTexture
                     : const BoxDecoration(
                         gradient: LinearGradient(
                           colors: [

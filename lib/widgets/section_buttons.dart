@@ -83,33 +83,37 @@ class SectionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: active ? accentColor : topBarColor,
+      color: topBarColor,
       borderRadius: BorderRadius.circular(8),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onPressed,
-        hoverColor: hoverColor,
-        // Actif : en creux, comme le marque-page choisi (ombre portée
-        // interne en haut).
-        child: DecoratedBox(
-          position: DecorationPosition.foreground,
-          decoration: active
-              ? const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0x99000000), Color(0x00000000)],
-                    stops: [0, 0.4],
-                  ),
-                )
-              : const BoxDecoration(),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                color: active ? Colors.white : null,
+      // Actif : le fond texturé doré.
+      child: Ink(
+        decoration: active ? accentTexture : null,
+        child: InkWell(
+          onTap: onPressed,
+          hoverColor: hoverColor,
+          // Actif : en creux, comme le marque-page choisi (ombre portée
+          // interne en haut).
+          child: DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: active
+                ? const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x99000000), Color(0x00000000)],
+                      stops: [0, 0.4],
+                    ),
+                  )
+                : const BoxDecoration(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: active ? Colors.white : null,
+                ),
               ),
             ),
           ),

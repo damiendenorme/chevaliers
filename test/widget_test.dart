@@ -127,18 +127,19 @@ void main() {
     );
     await tester.pump();
     // Au démarrage : la liste des parties, son bouton actif.
-    // Bouton actif : fond bleu et texte blanc, comme la ligne choisie de la
-    // liste.
+    // Bouton actif : fond texturé doré et texte blanc, comme la ligne
+    // choisie de la liste.
     bool isActive(String label) {
       final button = find.ancestor(
         of: find.text(label),
         matching: find.byType(SectionButton),
       );
-      final material = tester.widget<Material>(
-        find.descendant(of: button, matching: find.byType(Material)).first,
+      final ink = tester.widget<Ink>(
+        find.descendant(of: button, matching: find.byType(Ink)).first,
       );
       final text = tester.widget<Text>(find.text(label));
-      return material.color == accentColor && text.style?.color == Colors.white;
+      return ink.decoration == accentTexture &&
+          text.style?.color == Colors.white;
     }
 
     expect(isActive('Parties'), isTrue);
