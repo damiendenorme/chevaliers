@@ -16,6 +16,7 @@ class RowTable {
     this.globalScores,
     this.matchLists,
     this.matchDetails,
+    this.photos,
     this.banners,
     this.lists,
     this.sortableLists = false,
@@ -63,6 +64,12 @@ class RowTable {
   final List<MatchDetail>? matchDetails;
 
   MatchDetail? matchDetail(int index) => matchDetails?[index];
+
+  /// Pour les parties : URL des photos de chaque ligne (0 à plusieurs),
+  /// affichées dans une zone du détail. Null : pas de zone de photos.
+  final List<List<String>>? photos;
+
+  List<String>? photosOf(int index) => photos?[index];
 
   /// Chemin d'asset de l'image de bannière de chaque ligne (voir
   /// [bannerAsset]). Le fichier peut ne pas exister.
@@ -140,14 +147,21 @@ typedef MatchDetail = ({
 String bannerAsset(String table, int id) => 'assets/bannieres/$table/$id.jpg';
 
 /// Toutes les parties, dans l'ordre chronologique, pour le calcul du ELO,
-/// avec le lieu et la date de chacune (même ordre).
-Future<({List<EloGame> games, List<String?> places, List<DateTime> dates})>
+/// avec le lieu, la date et l'id de chacune (même ordre).
+Future<
+  ({
+    List<EloGame> games,
+    List<String?> places,
+    List<DateTime> dates,
+    List<int> ids,
+  })
+>
 _fetchGames(SupabaseClient db) async {
   final rows = await db
       .from('partie')
       .select(
-        'jeu_id, joueur1_id, joueur2_id, score_joueur1, score_joueur2, lieu, '
-        'created_at',
+        'id, jeu_id, joueur1_id, joueur2_id, score_joueur1, score_joueur2, '
+        'lieu, created_at',
       )
       .order('created_at', ascending: true)
       .order('id', ascending: true);
@@ -164,6 +178,7 @@ _fetchGames(SupabaseClient db) async {
     ],
     places: [for (final r in rows) r['lieu'] as String?],
     dates: [for (final r in rows) DateTime.parse(r['created_at'] as String)],
+    ids: [for (final r in rows) r['id'] as int],
   );
 }
 
@@ -178,11 +193,28 @@ Future<RowTable> fetchRows(String table) async {
   final db = Supabase.instance.client;
 
   if (table == 'partie') {
-    final (players, boardGames, (:games, :places, :dates)) = await (
+    final (
+      players,
+      boardGames,
+      (:games, :places, :dates, :ids),
+      photoRows,
+    ) = await (
       db.from('joueur').select('id, nom'),
       db.from('jeu').select('id, nom'),
       _fetchGames(db),
+      db
+          .from('photo')
+          .select('partie_id, chemin')
+          .order('created_at', ascending: true)
+          .order('id', ascending: true),
     ).wait;
+    // URL publique de chaque photo, par partie.
+    final photosByGame = <int, List<String>>{};
+    for (final r in photoRows) {
+      photosByGame
+          .putIfAbsent(r['partie_id'] as int, () => [])
+          .add(db.storage.from('photos').getPublicUrl(r['chemin'] as String));
+    }
     final playerNames = {
       for (final p in players) p['id'] as int: p['nom'] as String,
     };
@@ -218,6 +250,7 @@ Future<RowTable> fetchRows(String table) async {
       banners: [for (final (_, g) in recent) bannerAsset('jeu', g.game)],
       matchups: [for (final d in details) d.matchup],
       matchDetails: details,
+      photos: [for (final (i, _) in recent) photosByGame[ids[i]] ?? const []],
       columns: const ['Joueur 1', 'Score 1', 'Score 2', 'Joueur 2', 'Jeu'],
       rows: [
         for (final d in details)
@@ -233,7 +266,7 @@ Future<RowTable> fetchRows(String table) async {
   }
 
   if (table == 'joueur') {
-    final (players, boardGames, (:games, :places, :dates)) = await (
+    final (players, boardGames, (:games, :places, :dates, ids: _)) = await (
       db.from('joueur').select('id, nom').order('nom', ascending: true),
       db.from('jeu').select('id, nom').order('nom', ascending: true),
       _fetchGames(db),
@@ -302,7 +335,7 @@ Future<RowTable> fetchRows(String table) async {
   }
 
   if (table == 'jeu') {
-    final (boardGames, players, (:games, places: _, dates: _)) = await (
+    final (boardGames, players, (:games, places: _, dates: _, ids: _)) = await (
       db.from('jeu').select('id, nom').order('nom', ascending: true),
       db.from('joueur').select('id, nom').order('nom', ascending: true),
       _fetchGames(db),

@@ -471,6 +471,59 @@ void main() {
     );
   });
 
+  testWidgets('A party detail has a photo zone', (tester) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final detail = (
+      date: DateTime(2026, 11, 21),
+      matchup: (player1: 'Arthur', score1: 3, score2: 2, player2: 'Bors'),
+      game: 'Go',
+      place: 'Aumes',
+      eloDelta1: 5.0,
+      form1: const <Outcome>[],
+      form2: const <Outcome>[],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => RowTable(
+            columns: const [
+              'Joueur 1',
+              'Score 1',
+              'Score 2',
+              'Joueur 2',
+              'Jeu',
+            ],
+            rows: const [
+              ['Arthur', '3', '2', 'Bors', 'Go'],
+            ],
+            matchups: [detail.matchup],
+            matchDetails: [detail],
+            photos: const [[]],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('Arthur'));
+    await tester.pump();
+
+    // Sous la partie : la zone de photos, vide ici, sans titre. Son message
+    // est centré dans la place qui reste, en bas de la carte du détail.
+    expect(find.text('Photos'), findsNothing);
+    final message = tester.getRect(find.text('Aucune photo.'));
+    final card = tester.getRect(find.byType(RowList));
+    final detailLeft = card.left + RowList.listWidth + RowList.gap;
+    expect(message.center.dx, moreOrLessEquals((detailLeft + card.right) / 2));
+    final scoreBottom = tester.getRect(find.text('3').last).bottom;
+    expect(
+      message.center.dy,
+      moreOrLessEquals((scoreBottom + 16 + card.bottom) / 2, epsilon: 1),
+    );
+  });
+
   testWidgets('Hovering a button does not animate or resize it', (
     tester,
   ) async {

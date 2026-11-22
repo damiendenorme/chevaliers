@@ -229,36 +229,47 @@ class _MasterDetailState extends State<_MasterDetail> {
             ),
       detail: _selected == null
           ? null
-          : SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _Banner(table.banner(_selected!)),
-                  // Une partie : en grand, à la place de ses colonnes.
-                  if (table.matchDetail(_selected!) case final m?)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 16,
+          // La zone de photos remplit le bas de la carte (son message, s'il
+          // n'y a pas de photo, y est centré).
+          : CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _Banner(table.banner(_selected!)),
+                      // Une partie : en grand, à la place de ses colonnes.
+                      if (table.matchDetail(_selected!) case final m?)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 16,
+                          ),
+                          child: _MatchDetailLine(m, stacked: true),
+                        )
+                      else
+                        _Detail(table.entries(_selected!)),
+                      // Une clé par ligne : le tri repart de zéro à chaque
+                      // changement de ligne.
+                      _LineList(
+                        key: ValueKey(_selected),
+                        table.list(_selected!),
+                        sortable: table.sortableLists,
+                        forms: table.listForm(_selected!),
                       ),
-                      child: _MatchDetailLine(m, stacked: true),
-                    )
-                  else
-                    _Detail(table.entries(_selected!)),
-                  // Une clé par ligne : le tri repart de zéro à chaque
-                  // changement de ligne.
-                  _LineList(
-                    key: ValueKey(_selected),
-                    table.list(_selected!),
-                    sortable: table.sortableLists,
-                    forms: table.listForm(_selected!),
+                      _MatchupList(
+                        key: ValueKey(('parties', _selected)),
+                        table.matchList(_selected!),
+                      ),
+                    ],
                   ),
-                  _MatchupList(
-                    key: ValueKey(('parties', _selected)),
-                    table.matchList(_selected!),
+                ),
+                if (table.photosOf(_selected!) case final urls?)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _PhotoZone(urls),
                   ),
-                ],
-              ),
+              ],
             ),
     );
   }
@@ -696,6 +707,100 @@ class _EloDelta extends StatelessWidget {
             ? const Color(0xFFE5534B)
             : const Color(0xFF8A8F94),
       ),
+    );
+  }
+}
+
+/// Zone de photos : une grille de vignettes carrées ; un clic ouvre la photo
+/// en grand. Sans photo, un message centré dans la zone.
+class _PhotoZone extends StatelessWidget {
+  const _PhotoZone(this.urls);
+
+  static const double thumbnail = 120;
+
+  final List<String> urls;
+
+  @override
+  Widget build(BuildContext context) {
+    final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    if (urls.isEmpty) {
+      return Center(
+        child: Text('Aucune photo.', style: _text.copyWith(color: labelColor)),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 32, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final url in urls)
+                _Thumbnail(
+                  url,
+                  size: thumbnail,
+                  onTap: () => _open(context, url),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Photo en grand, par-dessus l'écran ; un clic à côté la ferme.
+  void _open(BuildContext context, String url) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        clipBehavior: Clip.antiAlias,
+        child: InteractiveViewer(
+          child: Image.network(url, errorBuilder: (_, _, _) => const _Broken()),
+        ),
+      ),
+    );
+  }
+}
+
+/// Vignette carrée d'une photo, recadrée, à coins arrondis.
+class _Thumbnail extends StatelessWidget {
+  const _Thumbnail(this.url, {required this.size, required this.onTap});
+
+  final String url;
+  final double size;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      borderRadius: BorderRadius.circular(6),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Ink.image(
+          image: NetworkImage(url),
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          onImageError: (_, _) {},
+        ),
+      ),
+    );
+  }
+}
+
+/// À la place d'une photo qui ne se charge pas.
+class _Broken extends StatelessWidget {
+  const _Broken();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.square(
+      dimension: 200,
+      child: Icon(Icons.broken_image_outlined),
     );
   }
 }
