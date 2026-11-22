@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../data/rows.dart';
+import 'name_dialog.dart';
 import 'top_bar.dart';
 
 /// Liste des lignes d'une table à gauche, détail de la ligne choisie à
@@ -13,7 +14,16 @@ import 'top_bar.dart';
 /// Gère aussi le chargement, l'erreur et le cas vide, dans la carte de la
 /// liste.
 class RowList extends StatelessWidget {
-  const RowList({super.key, required this.rows, this.onAdd});
+  const RowList({
+    super.key,
+    required this.rows,
+    this.onAdd,
+    this.onEditSummary,
+  });
+
+  /// Si non nul : le résumé d'une partie est modifiable (backoffice), avec
+  /// l'id de la partie et le nouveau texte (null : effacé).
+  final Future<void> Function(int partyId, String? text)? onEditSummary;
 
   static const double width = 1100;
 
@@ -70,27 +80,36 @@ class RowList extends StatelessWidget {
         if (table.rows.isEmpty) {
           return const _Cards(master: _Message('Aucune ligne.'));
         }
-        return _MasterDetail(table);
+        return _MasterDetail(table, onEditSummary: onEditSummary);
       },
     );
   }
 }
 
-/// Bouton rond « + », au fond texturé des éléments actifs, avec la bordure
-/// des éléments choisis et une ombre.
+/// Bouton rond « + » (ou une autre [icon]), au fond texturé des éléments
+/// actifs, avec la bordure des éléments choisis et une ombre.
 class AddButton extends StatelessWidget {
-  const AddButton({super.key, required this.onPressed});
+  const AddButton({
+    super.key,
+    required this.onPressed,
+    this.icon = Icons.add,
+    this.label = 'Ajouter',
+  });
 
   static const double size = 36;
 
   final VoidCallback onPressed;
+
+  /// Icône et nom (pour les lecteurs d'écran) du bouton.
+  final IconData icon;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
     final accent = AccentStyle.of(context);
     return Semantics(
       button: true,
-      label: 'Ajouter',
+      label: label,
       excludeSemantics: true,
       child: DecoratedBox(
         decoration: const BoxDecoration(
@@ -104,9 +123,9 @@ class AddButton extends StatelessWidget {
             decoration: accent.texture,
             child: InkWell(
               onTap: onPressed,
-              child: const SizedBox.square(
+              child: SizedBox.square(
                 dimension: size,
-                child: Icon(Icons.add, color: Colors.white, size: 22),
+                child: Icon(icon, color: Colors.white, size: 20),
               ),
             ),
           ),
@@ -161,9 +180,10 @@ const double _idColumnWidth = 34;
 const _cellPadding = EdgeInsets.symmetric(horizontal: 12, vertical: 4.5);
 
 class _MasterDetail extends StatefulWidget {
-  const _MasterDetail(this.table);
+  const _MasterDetail(this.table, {this.onEditSummary});
 
   final RowTable table;
+  final Future<void> Function(int partyId, String? text)? onEditSummary;
 
   @override
   State<_MasterDetail> createState() => _MasterDetailState();
@@ -175,6 +195,10 @@ enum _SortBy { name, score, id }
 class _MasterDetailState extends State<_MasterDetail> {
   /// Ligne affichée à droite, ou null tant qu'aucune n'est choisie.
   int? _selected;
+
+  /// Résumés modifiés depuis le chargement, par id de partie : affichés sans
+  /// recharger la liste (la sélection reste).
+  final _editedSummaries = <int, String?>{};
 
   /// Valeur de tri de chaque ligne, à côté du nom : le score (joueurs), le
   /// nombre de joueurs (jeux) ou la date (événements).
@@ -422,6 +446,29 @@ class _MasterDetailState extends State<_MasterDetail> {
                     ],
                   ),
                 ),
+                // Entre les informations et les photos : le résumé.
+                if (table.summaries != null)
+                  SliverToBoxAdapter(
+                    child: _Summary(
+                      switch (table.partyId(_selected!)) {
+                        final id? when _editedSummaries.containsKey(id) =>
+                          _editedSummaries[id],
+                        _ => table.summary(_selected!),
+                      },
+                      onEdit: switch ((
+                        widget.onEditSummary,
+                        table.partyId(_selected!),
+                      )) {
+                        (final edit?, final id?) => (text) async {
+                          await edit(id, text);
+                          if (mounted) {
+                            setState(() => _editedSummaries[id] = text);
+                          }
+                        },
+                        _ => null,
+                      },
+                    ),
+                  ),
                 if (table.photosOf(_selected!) case final urls?)
                   SliverFillRemaining(
                     hasScrollBody: false,
@@ -1235,6 +1282,58 @@ class _EloDelta extends StatelessWidget {
             : rounded < 0
             ? const Color(0xFFE5534B)
             : const Color(0xFF8A8F94),
+      ),
+    );
+  }
+}
+
+/// Résumé textuel d'une partie : le texte, ou « Aucun résumé. » centré. Avec
+/// [onEdit] (connecté), un bouton rond juste dessous ouvre une fenêtre pour
+/// l'écrire.
+class _Summary extends StatelessWidget {
+  const _Summary(this.text, {this.onEdit});
+
+  final String? text;
+  final Future<void> Function(String? text)? onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 24, 12, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 6,
+        children: [
+          // Centré, le résumé comme le message sans résumé.
+          Text(
+            text ?? 'Aucun résumé.',
+            textAlign: TextAlign.center,
+            style: text == null ? _text.copyWith(color: labelColor) : _text,
+          ),
+          // Connecté : un bouton rond, juste sous le texte, pour le modifier.
+          if (onEdit case final edit?)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: AddButton(
+                  icon: Icons.edit,
+                  label: 'Modifier le résumé',
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => AccentScope(
+                      style: AccentStyle.of(context),
+                      child: TextDialog(
+                        title: 'Résumé',
+                        initial: text,
+                        onSubmit: edit,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

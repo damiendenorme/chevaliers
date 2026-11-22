@@ -25,6 +25,8 @@ class RowTable {
     this.playerBanners,
     this.sessionDetails,
     this.sessionLines,
+    this.partyIds,
+    this.summaries,
     this.banners,
     this.lists,
     this.sortableLists = false,
@@ -112,6 +114,14 @@ class RowTable {
   final List<SessionDetail>? sessionDetails;
 
   SessionDetail? sessionDetail(int index) => sessionDetails?[index];
+
+  /// Pour les parties : l'id de chaque partie et son résumé textuel (null :
+  /// pas de résumé). Avec eux, le détail a une zone « Résumé ».
+  final List<int>? partyIds;
+  final List<String?>? summaries;
+
+  int? partyId(int index) => partyIds?[index];
+  String? summary(int index) => summaries?[index];
 
   /// Parties de JDR listées dans le détail de chaque ligne (pour un jeu) :
   /// leur libellé, avec les bannières de leur MJ et de leurs joueurs.
@@ -341,6 +351,10 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
           .order('created_at', ascending: true)
           .order('id', ascending: true),
     ).wait;
+    final summaryRows = await db.from('${prefix}partie').select('id, resume');
+    final summaryOf = {
+      for (final r in summaryRows) r['id'] as int: r['resume'] as String?,
+    };
     // URL publique de chaque photo, par partie.
     final photosByGame = <int, List<String>>{};
     for (final r in photoRows) {
@@ -372,6 +386,8 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
       matchups: [for (final d in details) d.matchup],
       matchDetails: details,
       photos: [for (final (i, _) in recent) photosByGame[ids[i]] ?? const []],
+      partyIds: [for (final (i, _) in recent) ids[i]],
+      summaries: [for (final (i, _) in recent) summaryOf[ids[i]]],
       columns: const ['Joueur 1', 'Score 1', 'Score 2', 'Joueur 2', 'Jeu'],
       rows: [
         for (final d in details)
@@ -742,3 +758,11 @@ String formatFullDate(DateTime date) {
   String two(int n) => n.toString().padLeft(2, '0');
   return '${two(d.day)}/${two(d.month)}/${d.year}';
 }
+
+/// Enregistre le résumé d'une partie (null ou vide : l'efface). Backoffice :
+/// réservé aux connectés. [prefix] : voir [fetchRows].
+Future<void> saveSummary(int partyId, String? text, {String prefix = ''}) =>
+    Supabase.instance.client
+        .from('${prefix}partie')
+        .update({'resume': (text == null || text.trim().isEmpty) ? null : text})
+        .eq('id', partyId);

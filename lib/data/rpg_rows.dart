@@ -14,6 +14,7 @@ typedef RpgSession = ({
   String? place,
   int? event,
   String? scenario,
+  String? summary,
 });
 
 /// Lignes d'une table JDR (préfixe rpg_), pour les parties, les joueurs, les
@@ -34,7 +35,7 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
     db
         .from('rpg_partie')
         .select(
-          'id, date, jeu_id, mj_id, evenement_id, scenario, '
+          'id, date, jeu_id, mj_id, evenement_id, scenario, resume, '
           'place:lieu_id(nom), rpg_partie_joueur(joueur_id)',
         )
         .order('date', ascending: false)
@@ -60,6 +61,7 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
         place: r['place']?['nom'] as String?,
         event: r['evenement_id'] as int?,
         scenario: r['scenario'] as String?,
+        summary: r['resume'] as String?,
       ),
   ];
   // Numéro d'ordre de chaque partie dans son événement (1, 2…), par date.
@@ -123,6 +125,8 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
         // La bannière d'une partie est celle de son jeu.
         banners: [for (final s in sessions) bannerAsset('rpg_jeu', s.game)],
         photos: [for (final s in sessions) photos[s.id] ?? const []],
+        partyIds: [for (final s in sessions) s.id],
+        summaries: [for (final s in sessions) s.summary],
         sessionDetails: [
           for (final s in sessions)
             (

@@ -84,6 +84,8 @@ Future<void> addRpgPlayer(String name) => addPlayer(name, prefix: 'rpg_');
 Future<void> addRpgEvent(String name, DateTime? date) =>
     addEvent(name, date, prefix: 'rpg_');
 Future<void> addRpgGame(String name) => addGame(name, prefix: 'rpg_');
+Future<void> saveRpgSummary(int partyId, String? text) =>
+    saveSummary(partyId, text, prefix: 'rpg_');
 
 /// L'écran : le fond, les marque-pages Wargame et RPG à gauche, Discord en
 /// haut à droite, et la page du marque-page choisi. Chaque page a ses
@@ -106,7 +108,14 @@ class MyHomePage extends StatefulWidget {
     this.loadPartyOptions = fetchPartyOptions,
     this.saveRpgParty = addRpgParty,
     this.loadRpgPartyOptions = fetchRpgPartyOptions,
+    this.writeSummary = saveSummary,
+    this.writeRpgSummary = saveRpgSummary,
   });
+
+  /// Enregistrement du résumé d'une partie (backoffice), au Wargame et au
+  /// RPG.
+  final Future<void> Function(int partyId, String? text) writeSummary;
+  final Future<void> Function(int partyId, String? text) writeRpgSummary;
 
   /// Ajout d'une partie de JDR (backoffice) : l'enregistrement et les
   /// choix proposés.
@@ -202,6 +211,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       addGame: widget.saveGame,
                       addParty: widget.saveParty,
                       loadPartyOptions: widget.loadPartyOptions,
+                      saveSummary: widget.writeSummary,
                     ),
                   ),
                   // RPG : accentuation bronze.
@@ -216,6 +226,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       addGame: widget.saveRpgGame,
                       addRpgParty: widget.saveRpgParty,
                       loadRpgPartyOptions: widget.loadRpgPartyOptions,
+                      saveSummary: widget.writeRpgSummary,
                     ),
                   ),
                 ],
@@ -317,6 +328,7 @@ class GamePage extends StatefulWidget {
     required this.addPlayer,
     required this.addEvent,
     required this.addGame,
+    required this.saveSummary,
     this.addParty,
     this.loadPartyOptions,
     this.addRpgParty,
@@ -334,6 +346,9 @@ class GamePage extends StatefulWidget {
 
   /// Ajout d'un jeu dans les données de la page.
   final Future<void> Function(String name) addGame;
+
+  /// Enregistrement du résumé d'une partie de la page.
+  final Future<void> Function(int partyId, String? text) saveSummary;
 
   /// Ajout d'un événement dans les données de la page.
   final Future<void> Function(String name, DateTime? date) addEvent;
@@ -519,6 +534,10 @@ class _GamePageState extends State<GamePage> {
                               key: ObjectKey(_rows),
                               rows: _rows,
                               onAdd: signedIn ? _adder : null,
+                              // Connecté : résumé des parties modifiable.
+                              onEditSummary: signedIn
+                                  ? widget.saveSummary
+                                  : null,
                             );
                           },
                         ),

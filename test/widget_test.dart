@@ -1550,6 +1550,84 @@ void main() {
     expect(gm.center.dy, moreOrLessEquals(date.center.dy, epsilon: 2));
   });
 
+  testWidgets('A party detail has a summary, editable when signed in', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final saved = <(int, String?)>[];
+    final auth = FakeAuth();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => const RowTable(
+            columns: ['Nom'],
+            rows: [
+              ['Excalibur'],
+            ],
+            partyIds: [42],
+            summaries: [null],
+            photos: [[]],
+          ),
+          loadCounts: () async =>
+              (players: 0, events: 0, games: 1, boardGames: 0),
+          auth: auth,
+          writeSummary: (id, text) async => saved.add((id, text)),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('Excalibur'));
+    await tester.pump();
+
+    // Entre les informations et les photos : le résumé, vide, sans titre ;
+    // son message centré dans la carte du détail.
+    expect(find.text('Résumé'), findsNothing);
+    expect(find.text('Aucun résumé.'), findsOneWidget);
+    final card = tester.getRect(find.byType(RowList));
+    expect(
+      tester.getRect(find.text('Aucun résumé.')).center.dx,
+      moreOrLessEquals(
+        (card.left + RowList.listWidth + RowList.gap + card.right) / 2,
+        epsilon: 1,
+      ),
+    );
+    expect(
+      tester.getRect(find.text('Aucun résumé.')).bottom,
+      lessThan(tester.getRect(find.text('Aucune photo.')).top),
+    );
+    // Bouton rond de modification du résumé.
+    final editButton = find.byWidgetPredicate(
+      (w) => w is AddButton && w.icon == Icons.edit,
+    );
+    // Déconnecté : pas de modification.
+    expect(editButton, findsNothing);
+
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+    // Juste sous « Aucun résumé. », centré comme lui.
+    final empty = tester.getRect(find.text('Aucun résumé.'));
+    final button = tester.getRect(editButton);
+    expect(button.top, greaterThan(empty.bottom));
+    expect(button.top - empty.bottom, lessThan(16));
+    expect(button.center.dx, moreOrLessEquals(empty.center.dx, epsilon: 1));
+    await tester.tap(editButton);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField),
+      'Arthur tire l’épée du rocher.',
+    );
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+
+    expect(saved, [(42, 'Arthur tire l’épée du rocher.')]);
+    // Affiché aussitôt, la partie reste sélectionnée.
+    expect(find.text('Arthur tire l’épée du rocher.'), findsOneWidget);
+    expect(find.text('Aucun résumé.'), findsNothing);
+  });
+
   testWidgets('Hovering a button does not animate or resize it', (
     tester,
   ) async {
