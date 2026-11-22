@@ -204,6 +204,9 @@ class _MasterDetailState extends State<_MasterDetail> {
     const divider = BorderSide(color: dividerColor);
 
     final list = SingleChildScrollView(
+      // Sans en-tête, le premier élément est baissé de l'épaisseur du
+      // bourrelet, comme l'en-tête : il paraît aussi haut que les autres.
+      padding: EdgeInsets.only(top: _sortable ? 0 : BevelEdge.width),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -239,23 +242,30 @@ class _MasterDetailState extends State<_MasterDetail> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Baissé de l'épaisseur du bourrelet, avec la hauteur de
+                // ligne de la liste : il paraît aussi haut que ses éléments.
                 DecoratedBox(
                   decoration: BoxDecoration(border: Border(bottom: divider)),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _SortHeader(
-                          'Nom',
-                          arrow: _sortBy == _SortBy.name ? _ascending : null,
-                          onTap: () => _sort(_SortBy.name),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: BevelEdge.width),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _SortHeader(
+                            'Nom',
+                            arrow: _sortBy == _SortBy.name ? _ascending : null,
+                            onTap: () => _sort(_SortBy.name),
+                            rowHeight: true,
+                          ),
                         ),
-                      ),
-                      _SortHeader(
-                        _valueLabel!,
-                        arrow: _sortBy == _SortBy.score ? _ascending : null,
-                        onTap: () => _sort(_SortBy.score),
-                      ),
-                    ],
+                        _SortHeader(
+                          _valueLabel!,
+                          arrow: _sortBy == _SortBy.score ? _ascending : null,
+                          onTap: () => _sort(_SortBy.score),
+                          rowHeight: true,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 Expanded(child: list),
@@ -490,11 +500,20 @@ class _MatchupLine extends StatelessWidget {
 /// Titre de colonne cliquable, pour trier la liste. [arrow] : flèche vers le
 /// haut (true) ou le bas (false) sur la colonne triée, rien sur l'autre.
 class _SortHeader extends StatelessWidget {
-  const _SortHeader(this.label, {required this.arrow, required this.onTap});
+  const _SortHeader(
+    this.label, {
+    required this.arrow,
+    required this.onTap,
+    this.rowHeight = false,
+  });
 
   final String label;
   final bool? arrow;
   final VoidCallback onTap;
+
+  /// Même hauteur de ligne que les éléments de la liste (texte de 14px),
+  /// malgré son texte plus petit.
+  final bool rowHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -509,7 +528,13 @@ class _SortHeader extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           spacing: 2,
           children: [
-            Text(label, style: style),
+            Text(
+              label,
+              style: style,
+              strutStyle: rowHeight
+                  ? const StrutStyle(fontSize: 14, forceStrutHeight: true)
+                  : null,
+            ),
             if (arrow != null)
               Icon(
                 arrow! ? Icons.arrow_upward : Icons.arrow_downward,
