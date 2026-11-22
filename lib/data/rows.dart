@@ -616,3 +616,20 @@ const _months = [
 
 /// Mois et année, sans le jour : « Décembre 2027 » (dates d'événements).
 String formatMonth(DateTime date) => '${_months[date.month - 1]} ${date.year}';
+
+/// Ajoute un joueur nommé [name] (backoffice : réservé aux connectés).
+/// [prefix] : préfixe des tables (voir [fetchRows]).
+Future<void> addPlayer(String name, {String prefix = ''}) =>
+    Supabase.instance.client.from('${prefix}joueur').insert({'nom': name});
+
+/// Ajoute un événement nommé [name], à la [date] (jour) facultative
+/// (backoffice : réservé aux connectés). [prefix] : voir [fetchRows].
+Future<void> addEvent(String name, DateTime? date, {String prefix = ''}) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return Supabase.instance.client.from('${prefix}evenement').insert({
+    'nom': name,
+    'date': ?(date == null
+        ? null
+        : '${date.year}-${two(date.month)}-${two(date.day)}'),
+  });
+}

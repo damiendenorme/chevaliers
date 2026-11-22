@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'data/auth.dart';
 import 'data/rows.dart';
 import 'supabase_config.dart';
+import 'widgets/login.dart';
+import 'widgets/name_dialog.dart';
 import 'widgets/row_list.dart';
 import 'widgets/section_buttons.dart';
 import 'widgets/top_bar.dart';
@@ -46,6 +50,10 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Les Chevaliers',
       debugShowCheckedModeBanner: false,
+      // En français (calendrier, textes des composants).
+      locale: const Locale('fr'),
+      supportedLocales: const [Locale('fr')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       theme: ThemeData(
         // Police de toute l'app : Cinzel, capitales romaines.
         fontFamily: 'Cinzel',
@@ -66,6 +74,9 @@ class MyApp extends StatelessWidget {
 /// Données RPG : mêmes tables que le Wargame, préfixées par rpg_.
 Future<RowTable> fetchRpgRows(String table) => fetchRows(table, prefix: 'rpg_');
 Future<Counts> fetchRpgCounts() => fetchCounts(prefix: 'rpg_');
+Future<void> addRpgPlayer(String name) => addPlayer(name, prefix: 'rpg_');
+Future<void> addRpgEvent(String name, DateTime? date) =>
+    addEvent(name, date, prefix: 'rpg_');
 
 /// L'écran : le fond, les marque-pages Wargame et RPG à gauche, Discord en
 /// haut à droite, et la page du marque-page choisi. Chaque page a ses
@@ -77,7 +88,23 @@ class MyHomePage extends StatefulWidget {
     this.loadCounts = fetchCounts,
     this.loadRpgRows = fetchRpgRows,
     this.loadRpgCounts = fetchRpgCounts,
+    this.auth = const SupabaseAuth(),
+    this.savePlayer = addPlayer,
+    this.saveRpgPlayer = addRpgPlayer,
+    this.saveEvent = addEvent,
+    this.saveRpgEvent = addRpgEvent,
   });
+
+  /// Ajout d'un joueur (backoffice), au Wargame et au RPG.
+  final Future<void> Function(String name) savePlayer;
+  final Future<void> Function(String name) saveRpgPlayer;
+
+  /// Ajout d'un événement (backoffice), au Wargame et au RPG.
+  final Future<void> Function(String name, DateTime? date) saveEvent;
+  final Future<void> Function(String name, DateTime? date) saveRpgEvent;
+
+  /// Connexion au backoffice.
+  final AppAuth auth;
 
   /// Données de la page Wargame.
   final Future<RowTable> Function(String table) loadRows;
@@ -142,6 +169,9 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: GamePage(
                       loadRows: widget.loadRows,
                       loadCounts: widget.loadCounts,
+                      auth: widget.auth,
+                      addPlayer: widget.savePlayer,
+                      addEvent: widget.saveEvent,
                     ),
                   ),
                   // RPG : accentuation bronze.
@@ -150,6 +180,9 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: GamePage(
                       loadRows: widget.loadRpgRows,
                       loadCounts: widget.loadRpgCounts,
+                      auth: widget.auth,
+                      addPlayer: widget.saveRpgPlayer,
+                      addEvent: widget.saveRpgEvent,
                     ),
                   ),
                 ],
@@ -175,6 +208,16 @@ class _MyHomePageState extends State<MyHomePage> {
                       onPressed: () => setState(() => _bookmark = i),
                     ),
                 ],
+              ),
+            ),
+            // En bas à gauche : le lien de connexion au backoffice, aux
+            // couleurs de la page affichée.
+            Positioned(
+              left: 12,
+              bottom: 12,
+              child: AccentScope(
+                style: _bookmarks[_bookmark].$2,
+                child: LoginLink(auth: widget.auth),
               ),
             ),
             // En haut à droite, à l'écart des bords : Discord, puis Facebook
@@ -233,9 +276,25 @@ class _SocialPlate extends StatelessWidget {
 /// sections et les deux cartes, avec les données de [loadRows] et
 /// [loadCounts].
 class GamePage extends StatefulWidget {
-  const GamePage({super.key, required this.loadRows, required this.loadCounts});
+  const GamePage({
+    super.key,
+    required this.loadRows,
+    required this.loadCounts,
+    required this.auth,
+    required this.addPlayer,
+    required this.addEvent,
+  });
+
+  /// Ajout d'un événement dans les données de la page.
+  final Future<void> Function(String name, DateTime? date) addEvent;
 
   final Future<RowTable> Function(String table) loadRows;
+
+  /// Connexion : une fois connecté, la liste des joueurs a un bouton « + ».
+  final AppAuth auth;
+
+  /// Ajout d'un joueur dans les données de la page.
+  final Future<void> Function(String name) addPlayer;
 
   /// Nombres affichés dans l'encoche du haut de l'écran.
   final Future<Counts> Function() loadCounts;
@@ -266,7 +325,50 @@ class _GamePageState extends State<GamePage> {
   /// Section affichée au démarrage : les parties.
   static const _startSection = 2;
 
-  late final Future<Counts> _counts = widget.loadCounts();
+  late Future<Counts> _counts = widget.loadCounts();
+
+  late final Stream<bool> _signedIn = widget.auth.signedIn;
+
+  /// Bouton « + » de la section affichée : joueurs (nom) ou événements (nom
+  /// et date) ; aucun ailleurs.
+  VoidCallback? get _adder => switch (_active) {
+    0 => () => _add(
+      title: 'Nouveau joueur',
+      save: (name, _) => widget.addPlayer(name),
+    ),
+    1 => () => _add(
+      title: 'Nouvel événement',
+      askDate: true,
+      save: widget.addEvent,
+    ),
+    _ => null,
+  };
+
+  /// Demande le nom (et la date), enregistre, puis recharge la liste et les
+  /// nombres.
+  Future<void> _add({
+    required String title,
+    required Future<void> Function(String name, DateTime? date) save,
+    bool askDate = false,
+  }) => showDialog<void>(
+    context: context,
+    builder: (_) => AccentScope(
+      style: AccentStyle.of(context),
+      child: NameDialog(
+        title: title,
+        label: 'Nom',
+        askDate: askDate,
+        onSubmit: (name, date) async {
+          await save(name, date);
+          if (!mounted) return;
+          setState(() {
+            _rows = widget.loadRows(_sections[_active].$2);
+            _counts = widget.loadCounts();
+          });
+        },
+      ),
+    ),
+  );
 
   /// Section affichée, dont le bouton est actif.
   int _active = _startSection;
@@ -315,7 +417,21 @@ class _GamePageState extends State<GamePage> {
                       ),
                       const SizedBox(height: _tableGap),
                       Expanded(
-                        child: RowList(key: ObjectKey(_rows), rows: _rows),
+                        // Connecté, sur les joueurs ou les événements : bouton
+                        // « + ».
+                        child: StreamBuilder<bool>(
+                          stream: _signedIn,
+                          initialData: false,
+                          builder: (context, snapshot) {
+                            final signedIn =
+                                !snapshot.hasError && (snapshot.data ?? false);
+                            return RowList(
+                              key: ObjectKey(_rows),
+                              rows: _rows,
+                              onAdd: signedIn ? _adder : null,
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ),

@@ -1,13 +1,39 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chevaliers/data/auth.dart';
 import 'package:chevaliers/data/rows.dart';
 import 'package:chevaliers/main.dart';
 import 'package:chevaliers/widgets/row_list.dart';
 import 'package:chevaliers/widgets/section_buttons.dart';
 import 'package:chevaliers/widgets/top_bar.dart';
+
+/// Connexion factice : un seul compte, arthur@table.fr / excalibur.
+class FakeAuth implements AppAuth {
+  final _changes = StreamController<bool>.broadcast();
+  bool _in = false;
+
+  @override
+  Stream<bool> get signedIn async* {
+    yield _in;
+    yield* _changes.stream;
+  }
+
+  @override
+  Future<void> signIn(String email, String password) async {
+    if (email != 'arthur@table.fr' || password != 'excalibur') {
+      throw const AuthFailure('E-mail ou mot de passe incorrect.');
+    }
+    _changes.add(_in = true);
+  }
+
+  @override
+  Future<void> signOut() async => _changes.add(_in = false);
+}
 
 /// Texte [t] dans la carte des listes (hors encoche du haut de l'écran).
 Finder inList(String t) =>
@@ -1013,6 +1039,171 @@ void main() {
     await tester.tap(inList('ID'));
     await tester.pump();
     expect(order(), ['Arthur', 'Gauvain', 'Bors']);
+  });
+
+  testWidgets('« Connexion », bottom left, signs in and out', (tester) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => const RowTable(columns: ['Nom'], rows: []),
+          auth: FakeAuth(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // En bas à gauche de l'écran.
+    final link = tester.getRect(find.text('Connexion'));
+    expect(link.left, lessThan(40));
+    expect(link.bottom, greaterThan(800 - 40));
+
+    // Le formulaire : refus, puis connexion.
+    await tester.tap(find.text('Connexion'));
+    await tester.pumpAndSettle();
+    expect(find.text('Se connecter'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(0), 'arthur@table.fr');
+    await tester.enterText(find.byType(TextField).at(1), 'mauvais');
+    await tester.tap(find.text('Se connecter'));
+    await tester.pumpAndSettle();
+    expect(find.text('E-mail ou mot de passe incorrect.'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).at(1), 'excalibur');
+    await tester.tap(find.text('Se connecter'));
+    await tester.pumpAndSettle();
+    expect(find.text('Se connecter'), findsNothing);
+    expect(find.text('Déconnexion'), findsOneWidget);
+
+    // Déconnexion.
+    await tester.tap(find.text('Déconnexion'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connexion'), findsOneWidget);
+  });
+
+  testWidgets('Signed in, a + button adds a player (Wargame or RPG)', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final players = ['Arthur'];
+    final rpgPlayers = <String>[];
+    RowTable table(List<String> names) => RowTable(
+      columns: const ['Nom'],
+      rows: [
+        for (final n in names) [n],
+      ],
+    );
+    final auth = FakeAuth();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => table(players),
+          loadRpgRows: (_) async => table(rpgPlayers),
+          loadCounts: () async =>
+              (players: players.length, events: 0, games: 0, boardGames: 0),
+          loadRpgCounts: () async =>
+              (players: rpgPlayers.length, events: 0, games: 0, boardGames: 0),
+          auth: auth,
+          savePlayer: (name) async => players.add(name),
+          saveRpgPlayer: (name) async => rpgPlayers.add(name),
+        ),
+      ),
+    );
+    await tester.pump();
+    final joueurs = find.descendant(
+      of: find.byType(SectionBar),
+      matching: find.text('Joueurs'),
+    );
+    await tester.tap(joueurs);
+    await tester.pump();
+
+    // Déconnecté : pas de bouton.
+    expect(find.byType(AddButton), findsNothing);
+
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+    expect(find.byType(AddButton), findsOneWidget);
+
+    // Seulement sur la liste des joueurs.
+    await tester.tap(find.text('Jeux'));
+    await tester.pump();
+    expect(find.byType(AddButton), findsNothing);
+    await tester.tap(joueurs);
+    await tester.pump();
+
+    // Ajout : le nom est demandé, enregistré, et la liste rechargée.
+    await tester.tap(find.byType(AddButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Nouveau joueur'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'Lancelot');
+    await tester.tap(find.text('Ajouter'));
+    await tester.pumpAndSettle();
+    expect(players, ['Arthur', 'Lancelot']);
+    expect(find.text('Lancelot'), findsOneWidget);
+
+    // Au RPG, dans ses propres données (sa liste est vide au départ).
+    await tester.tap(find.text('RPG'));
+    await tester.pumpAndSettle();
+    await tester.tap(joueurs);
+    await tester.pump();
+    await tester.tap(find.byType(AddButton));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Merlin');
+    await tester.tap(find.text('Ajouter'));
+    await tester.pumpAndSettle();
+    expect(rpgPlayers, ['Merlin']);
+    expect(players, ['Arthur', 'Lancelot']);
+    expect(find.text('Merlin'), findsOneWidget);
+  });
+
+  testWidgets('Signed in, a + button adds an event with an optional date', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final events = <(String, DateTime?)>[];
+    final auth = FakeAuth();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => RowTable(
+            columns: const ['Nom', 'Date'],
+            rows: [
+              for (final (name, _) in events) [name, '—'],
+            ],
+            dates: [for (final (_, date) in events) date],
+          ),
+          loadCounts: () async =>
+              (players: 0, events: events.length, games: 0, boardGames: 0),
+          auth: auth,
+          saveEvent: (name, date) async => events.add((name, date)),
+        ),
+      ),
+    );
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+    await tester.tap(find.text('Événements').first);
+    await tester.pump();
+    expect(find.byType(AddButton), findsOneWidget);
+
+    await tester.tap(find.byType(AddButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Nouvel événement'), findsOneWidget);
+    // Une date facultative, à choisir.
+    expect(find.text('Date : aucune'), findsOneWidget);
+    expect(find.text('Choisir'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'Tournoi de Noël');
+    await tester.tap(find.text('Ajouter'));
+    await tester.pumpAndSettle();
+    expect(events, [('Tournoi de Noël', null)]);
+    expect(find.text('Tournoi de Noël'), findsOneWidget);
   });
 
   testWidgets('Hovering a button does not animate or resize it', (

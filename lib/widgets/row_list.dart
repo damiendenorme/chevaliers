@@ -13,7 +13,7 @@ import 'top_bar.dart';
 /// Gère aussi le chargement, l'erreur et le cas vide, dans la carte de la
 /// liste.
 class RowList extends StatelessWidget {
-  const RowList({super.key, required this.rows});
+  const RowList({super.key, required this.rows, this.onAdd});
 
   static const double width = 1100;
 
@@ -25,9 +25,25 @@ class RowList extends StatelessWidget {
 
   final Future<RowTable> rows;
 
+  /// Si non nul : un bouton « + » en bas à droite de la carte de la liste,
+  /// pour ajouter un élément (backoffice).
+  final VoidCallback? onAdd;
+
   @override
   Widget build(BuildContext context) {
-    return SizedBox.expand(child: _content());
+    return SizedBox.expand(
+      child: Stack(
+        children: [
+          Positioned.fill(child: _content()),
+          if (onAdd case final add?)
+            Positioned(
+              left: listWidth - 12 - AddButton.size,
+              bottom: 12,
+              child: AddButton(onPressed: add),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _content() {
@@ -56,6 +72,46 @@ class RowList extends StatelessWidget {
         }
         return _MasterDetail(table);
       },
+    );
+  }
+}
+
+/// Bouton rond « + », au fond texturé des éléments actifs, avec la bordure
+/// des éléments choisis et une ombre.
+class AddButton extends StatelessWidget {
+  const AddButton({super.key, required this.onPressed});
+
+  static const double size = 36;
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AccentStyle.of(context);
+    return Semantics(
+      button: true,
+      label: 'Ajouter',
+      excludeSemantics: true,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: lightShadow,
+        ),
+        child: Material(
+          shape: CircleBorder(side: BorderSide(color: accent.border)),
+          clipBehavior: Clip.antiAlias,
+          child: Ink(
+            decoration: accent.texture,
+            child: InkWell(
+              onTap: onPressed,
+              child: const SizedBox.square(
+                dimension: size,
+                child: Icon(Icons.add, color: Colors.white, size: 22),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
