@@ -297,7 +297,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: MyHomePage(
-          loadRows: (_) async => const RowTable(
+          loadRows: (_) async => RowTable(
             columns: ['Nom'],
             rows: [
               ['Arthur'],
@@ -324,7 +324,32 @@ void main() {
               [],
             ],
             matchLists: [
-              [(player1: 'Arthur', score1: 7, score2: 9, player2: 'Bors')],
+              [
+                (
+                  date: DateTime(2026, 11, 21),
+                  matchup: (
+                    player1: 'Arthur',
+                    score1: 7,
+                    score2: 9,
+                    player2: 'Bors',
+                  ),
+                  game: 'Go',
+                  place: 'Aumes',
+                  eloDelta1: -4.62,
+                ),
+                (
+                  date: DateTime(2026, 11, 3),
+                  matchup: (
+                    player1: 'Arthur',
+                    score1: 5,
+                    score2: 1,
+                    player2: 'Lancelot',
+                  ),
+                  game: 'Awalé',
+                  place: 'Frontignan',
+                  eloDelta1: 3,
+                ),
+              ],
               [],
               [],
               [],
@@ -380,6 +405,43 @@ void main() {
     expect(score.top, greaterThan(title.bottom));
     expect(find.text('Bors'), findsNWidgets(2));
 
+    // Parties : par date au départ, puis triables par jeu ou par lieu.
+    double y(String t) => tester.getRect(find.text(t).last).top;
+    expect(y('Go'), lessThan(y('Awalé')));
+    await tester.tap(find.text('Jeu'));
+    await tester.pump();
+    expect(y('Awalé'), lessThan(y('Go')));
+    await tester.tap(find.text('Jeu'));
+    await tester.pump();
+    expect(y('Go'), lessThan(y('Awalé')));
+    await tester.tap(find.text('Lieu'));
+    await tester.pump();
+    expect(y('Aumes'), lessThan(y('Frontignan')));
+    await tester.tap(find.text('Lieu'));
+    await tester.pump();
+    expect(y('Frontignan'), lessThan(y('Aumes')));
+    // Par date : de la plus récente à la plus ancienne, puis l'inverse.
+    await tester.tap(find.text('Date'));
+    await tester.pump();
+    expect(y('21/11/2026'), lessThan(y('03/11/2026')));
+    await tester.tap(find.text('Date'));
+    await tester.pump();
+    expect(y('03/11/2026'), lessThan(y('21/11/2026')));
+
+    // Le jeu à gauche du joueur 1, le lieu à droite du joueur 2, et
+    // l'évolution du ELO de chacun près de son nom.
+    double left(String t) => tester.getRect(find.text(t).last).left;
+    double right(String t) => tester.getRect(find.text(t).last).right;
+    expect(right('Go'), lessThan(left('Arthur')));
+    expect(left('Aumes'), greaterThan(right('Bors')));
+    expect(find.text('−4,6'), findsOneWidget);
+    expect(find.text('+4,6'), findsOneWidget);
+    // ELO du joueur 1 à gauche de son nom, celui du joueur 2 à droite.
+    expect(right('−4,6'), lessThan(left('Arthur')));
+    expect(left('+4,6'), greaterThan(right('Bors')));
+    // La date à gauche du jeu.
+    expect(right('21/11/2026'), lessThan(left('Go')));
+
     // Pastilles par jeu dans la liste de ses jeux.
     final semantics = tester.ensureSemantics();
     expect(find.bySemanticsLabel('Victoire'), findsOneWidget);
@@ -400,7 +462,7 @@ void main() {
     expect(top('Dames'), lessThan(top('Échecs')));
     // Le tri de la liste de gauche n'a pas bougé.
     expect(
-      tester.getRect(find.text('Lancelot')).top,
+      tester.getRect(find.text('Lancelot').first).top,
       lessThan(tester.getRect(find.text('Arthur').first).top),
     );
   });

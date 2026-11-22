@@ -39,15 +39,12 @@ class RowList extends StatelessWidget {
           );
         }
         if (!snapshot.hasData) {
+          // Chargement : spinner au centre de la carte.
           return const _Cards(
-            master: Padding(
-              padding: EdgeInsets.all(12),
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+            master: Center(
+              child: SizedBox.square(
+                dimension: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
             ),
           );
@@ -82,8 +79,8 @@ class _Cards extends StatelessWidget {
   }
 }
 
-/// Carte au style de la barre de menu, à coins arrondis et légère ombre ; son
-/// contenu (ligne active, survol) est découpé avec.
+/// Carte sombre à coins arrondis, liseré bronze et légère ombre ; son contenu
+/// (ligne active, survol) est découpé avec.
 class _Card extends StatelessWidget {
   const _Card(this.child);
 
@@ -92,18 +89,30 @@ class _Card extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(8);
-    // L'ombre est posée hors du découpage, pour ne pas être coupée.
+    // L'ombre est posée hors du découpage, pour ne pas être coupée ; le
+    // liseré bronze par-dessus le contenu.
     return DecoratedBox(
       decoration: BoxDecoration(borderRadius: radius, boxShadow: lightShadow),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: ColoredBox(color: topBarColor, child: child),
+      position: DecorationPosition.background,
+      child: DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          border: Border.all(color: edgeColor),
+        ),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: ColoredBox(color: topBarColor, child: child),
+        ),
       ),
     );
   }
 }
 
 const _text = TextStyle(fontSize: 14);
+
+/// Largeur des colonnes de scores ELO (4 chiffres), alignés à droite.
+const double _scoreWidth = 44;
 const _cellPadding = EdgeInsets.symmetric(horizontal: 12, vertical: 4);
 
 class _MasterDetail extends StatefulWidget {
@@ -159,9 +168,7 @@ class _MasterDetailState extends State<_MasterDetail> {
   @override
   Widget build(BuildContext context) {
     final table = widget.table;
-    final divider = BorderSide(
-      color: Theme.of(context).scaffoldBackgroundColor,
-    );
+    const divider = BorderSide(color: dividerColor);
 
     final list = SingleChildScrollView(
       child: Column(
@@ -236,7 +243,10 @@ class _MasterDetailState extends State<_MasterDetail> {
                     sortable: table.sortableLists,
                     forms: table.listForm(_selected!),
                   ),
-                  _MatchupList(table.matchList(_selected!)),
+                  _MatchupList(
+                    key: ValueKey(('parties', _selected)),
+                    table.matchList(_selected!),
+                  ),
                 ],
               ),
             ),
@@ -284,7 +294,7 @@ class _MasterLine extends StatelessWidget {
           _Form(form),
           // Largeur fixe : les scores restent alignés d'une ligne à l'autre.
           SizedBox(
-            width: 28,
+            width: _scoreWidth,
             child: text(score?.toString() ?? '', align: TextAlign.right),
           ),
         ],
@@ -299,10 +309,14 @@ class _MasterLine extends StatelessWidget {
 /// le joueur 2 à droite. Le gagnant et son score sont en gras, le perdant et
 /// son score grisés ; à égalité, aucun des deux.
 class _MatchupLine extends StatelessWidget {
-  const _MatchupLine(this.m, {required this.style});
+  const _MatchupLine(this.m, {required this.style, this.eloDelta1});
 
   final Matchup m;
   final TextStyle style;
+
+  /// Évolution du ELO du joueur 1, affichée à gauche de son nom ; celle du
+  /// joueur 2, l'opposée, à droite du sien. Rien si null.
+  final double? eloDelta1;
 
   @override
   Widget build(BuildContext context) {
@@ -325,10 +339,19 @@ class _MatchupLine extends StatelessWidget {
 
     // Les deux joueurs, puis les deux scores, ont la même largeur : le tiret
     // entre les scores reste au milieu.
+    final d = eloDelta1;
     return Row(
       spacing: 8,
       children: [
-        Expanded(child: text(m.player1, style: style1)),
+        Expanded(
+          child: Row(
+            spacing: 4,
+            children: [
+              if (d != null) _EloDelta(d),
+              Flexible(child: text(m.player1, style: style1)),
+            ],
+          ),
+        ),
         SizedBox(
           width: 20,
           child: text('${m.score1}', style: style1, align: TextAlign.right),
@@ -336,7 +359,16 @@ class _MatchupLine extends StatelessWidget {
         Text('–', style: style),
         SizedBox(width: 20, child: text('${m.score2}', style: style2)),
         Expanded(
-          child: text(m.player2, style: style2, align: TextAlign.right),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            spacing: 4,
+            children: [
+              Flexible(
+                child: text(m.player2, style: style2, align: TextAlign.right),
+              ),
+              if (d != null) _EloDelta(-d),
+            ],
+          ),
         ),
       ],
     );
@@ -407,9 +439,9 @@ class _Form extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: switch (o) {
-                  Outcome.win => const Color(0xFF2E9E4F),
-                  Outcome.draw => const Color(0xFF9AA0A6),
-                  Outcome.loss => const Color(0xFFD93025),
+                  Outcome.win => const Color(0xFF3FB96A),
+                  Outcome.draw => const Color(0xFF8A8F94),
+                  Outcome.loss => const Color(0xFFE5534B),
                 },
               ),
             ),
@@ -522,9 +554,7 @@ class _LineListState extends State<_LineList> {
 
   @override
   Widget build(BuildContext context) {
-    final divider = BorderSide(
-      color: Theme.of(context).scaffoldBackgroundColor,
-    );
+    const divider = BorderSide(color: dividerColor);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -569,7 +599,7 @@ class _LineListState extends State<_LineList> {
                     // Largeur fixe, comme dans la liste de gauche : les
                     // valeurs restent alignées.
                     SizedBox(
-                      width: 28,
+                      width: _scoreWidth,
                       child: Text(
                         widget.lines[i].$2,
                         style: _text,
@@ -587,19 +617,100 @@ class _LineListState extends State<_LineList> {
   }
 }
 
-/// Liste de parties, au style de la liste de gauche, sous un petit titre.
-/// Rien si la liste est vide.
-class _MatchupList extends StatelessWidget {
-  const _MatchupList(this.matchups);
+/// Évolution d'un ELO : signée, à une décimale (virgule), en vert si elle
+/// est positive, en rouge si elle est négative, en gris si elle est nulle.
+class _EloDelta extends StatelessWidget {
+  const _EloDelta(this.delta);
 
-  final List<Matchup> matchups;
+  final double delta;
 
   @override
   Widget build(BuildContext context) {
-    if (matchups.isEmpty) return const SizedBox.shrink();
-    final divider = BorderSide(
-      color: Theme.of(context).scaffoldBackgroundColor,
+    final rounded = (delta * 10).round() / 10;
+    final sign = rounded > 0 ? '+' : (rounded < 0 ? '−' : '±');
+    final value = rounded.abs().toStringAsFixed(1).replaceAll('.', ',');
+    return Text(
+      '$sign$value',
+      style: _text.copyWith(
+        fontSize: 12,
+        color: rounded > 0
+            ? const Color(0xFF3FB96A)
+            : rounded < 0
+            ? const Color(0xFFE5534B)
+            : const Color(0xFF8A8F94),
+      ),
     );
+  }
+}
+
+/// Liste de parties, au style de la liste de gauche, sous un petit titre.
+/// Rien si la liste est vide.
+/// Date au format jj/mm/aaaa, dans le fuseau de l'appareil.
+String _formatDate(DateTime date) {
+  final d = date.toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(d.day)}/${two(d.month)}/${d.year}';
+}
+
+/// Tri des parties du détail : par date (de la plus récente à la plus
+/// ancienne, l'ordre de départ), par jeu ou par lieu.
+enum _MatchSort { date, game, place }
+
+class _MatchupList extends StatefulWidget {
+  const _MatchupList(this.matchups, {super.key});
+
+  /// Largeur des colonnes de la date et du jeu, à gauche, et de celle du
+  /// lieu, à droite.
+  static const double dateWidth = 76;
+  static const double gameWidth = 120;
+  static const double placeWidth = 80;
+
+  /// Parties, de la plus récente à la plus ancienne.
+  final List<MatchDetail> matchups;
+
+  @override
+  State<_MatchupList> createState() => _MatchupListState();
+}
+
+class _MatchupListState extends State<_MatchupList> {
+  _MatchSort _sortBy = _MatchSort.date;
+  bool _ascending = false;
+
+  /// Un clic sur « Date » trie de la plus récente à la plus ancienne, sur
+  /// « Jeu » ou « Lieu » de A à Z ; un second clic sur la même colonne
+  /// inverse le sens.
+  void _sort(_MatchSort by) {
+    setState(() {
+      _ascending = by == _sortBy ? !_ascending : by != _MatchSort.date;
+      _sortBy = by;
+    });
+  }
+
+  /// Positions des parties dans l'ordre affiché ; à égalité, de la plus
+  /// récente à la plus ancienne.
+  List<int> _order(List<MatchDetail> matchups) {
+    final order = [for (var i = 0; i < matchups.length; i++) i];
+    // Les parties arrivent de la plus récente à la plus ancienne.
+    if (_sortBy == _MatchSort.date) {
+      return _ascending ? order.reversed.toList() : order;
+    }
+    String key(MatchDetail m) =>
+        _sortBy == _MatchSort.game ? m.game : (m.place ?? '');
+    final direction = _ascending ? 1 : -1;
+    return order..sort((i, j) {
+      final byKey = key(matchups[i]).compareTo(key(matchups[j]));
+      return byKey != 0 ? direction * byKey : i.compareTo(j);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final matchups = widget.matchups;
+    if (matchups.isEmpty) return const SizedBox.shrink();
+    const dateWidth = _MatchupList.dateWidth;
+    const gameWidth = _MatchupList.gameWidth;
+    const placeWidth = _MatchupList.placeWidth;
+    const divider = BorderSide(color: dividerColor);
     final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -612,12 +723,83 @@ class _MatchupList extends StatelessWidget {
             style: _text.copyWith(fontSize: 12, color: labelColor),
           ),
         ),
-        for (final m in matchups)
+        // En-tête : trier par date, par jeu ou par lieu. Chaque titre au-dessus
+        // de sa colonne.
+        DecoratedBox(
+          decoration: BoxDecoration(border: Border(bottom: divider)),
+          child: Row(
+            children: [
+              SizedBox(
+                width: dateWidth + 12,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _SortHeader(
+                    'Date',
+                    arrow: _sortBy == _MatchSort.date ? _ascending : null,
+                    onTap: () => _sort(_MatchSort.date),
+                  ),
+                ),
+              ),
+              _SortHeader(
+                'Jeu',
+                arrow: _sortBy == _MatchSort.game ? _ascending : null,
+                onTap: () => _sort(_MatchSort.game),
+              ),
+              const Spacer(),
+              _SortHeader(
+                'Lieu',
+                arrow: _sortBy == _MatchSort.place ? _ascending : null,
+                onTap: () => _sort(_MatchSort.place),
+              ),
+            ],
+          ),
+        ),
+        // La date et le jeu à gauche du joueur 1, le lieu à droite du
+        // joueur 2.
+        for (final m in [for (final i in _order(matchups)) matchups[i]])
           DecoratedBox(
             decoration: BoxDecoration(border: Border(bottom: divider)),
             child: Padding(
               padding: _cellPadding,
-              child: _MatchupLine(m, style: _text),
+              child: Row(
+                spacing: 12,
+                children: [
+                  SizedBox(
+                    width: dateWidth,
+                    child: Text(
+                      _formatDate(m.date),
+                      style: _text.copyWith(color: labelColor),
+                      softWrap: false,
+                    ),
+                  ),
+                  SizedBox(
+                    width: gameWidth,
+                    child: Text(
+                      m.game,
+                      style: _text.copyWith(color: labelColor),
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Expanded(
+                    child: _MatchupLine(
+                      m.matchup,
+                      style: _text,
+                      eloDelta1: m.eloDelta1,
+                    ),
+                  ),
+                  SizedBox(
+                    width: placeWidth,
+                    child: Text(
+                      m.place ?? '',
+                      style: _text.copyWith(color: labelColor),
+                      textAlign: TextAlign.right,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
       ],

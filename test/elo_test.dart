@@ -8,39 +8,39 @@ EloGame g(int game, int p1, int p2, int s1, int s2) =>
 
 void main() {
   group('computeElo', () {
-    test('everyone starts at 100', () {
+    test('everyone starts at 1000', () {
       final elo = computeElo([]);
-      expect(eloOf(elo, 1, 1), 100);
+      expect(eloOf(elo, 1, 1), 1000);
     });
 
-    test('a win between equals moves K/2 = 5 points', () {
+    test('a win between equals moves K/2 = 50 points', () {
       final elo = computeElo([g(1, 1, 2, 3, 1)]);
-      expect(elo[1]![1], 105);
-      expect(elo[1]![2], 95);
+      expect(elo[1]![1], 1050);
+      expect(elo[1]![2], 950);
     });
 
     test('a draw between equals changes nothing', () {
       final elo = computeElo([g(1, 1, 2, 2, 2)]);
-      expect(elo[1]![1], 100);
-      expect(elo[1]![2], 100);
+      expect(elo[1]![1], 1000);
+      expect(elo[1]![2], 1000);
     });
 
     test('beating a stronger player earns more', () {
       final elo = computeElo([
-        g(1, 1, 2, 1, 0), // 1 : 105, 2 : 95
-        g(1, 3, 1, 1, 0), // 3 (100) bat 1 (105)
+        g(1, 1, 2, 1, 0), // 1 : 1050, 2 : 950
+        g(1, 3, 1, 1, 0), // 3 (1000) bat 1 (1050)
       ]);
-      final gain = elo[1]![3]! - 100;
-      expect(gain, greaterThan(5));
-      expect(gain, lessThan(10));
-      expect(elo[1]![1]! + elo[1]![2]! + elo[1]![3]!, closeTo(300, 1e-9));
+      final gain = elo[1]![3]! - 1000;
+      expect(gain, greaterThan(50));
+      expect(gain, lessThan(100));
+      expect(elo[1]![1]! + elo[1]![2]! + elo[1]![3]!, closeTo(3000, 1e-9));
     });
 
     test('each game has its own ranking', () {
       final elo = computeElo([g(1, 1, 2, 1, 0), g(2, 2, 1, 1, 0)]);
-      expect(eloOf(elo, 1, 1), 105);
-      expect(eloOf(elo, 2, 1), 95);
-      expect(eloOf(elo, 3, 1), 100);
+      expect(eloOf(elo, 1, 1), 1050);
+      expect(eloOf(elo, 2, 1), 950);
+      expect(eloOf(elo, 3, 1), 1000);
     });
   });
 
@@ -102,5 +102,15 @@ void main() {
     expect(globalElo(elo, 7), 103); // (110 + 95) / 2 = 102,5
     expect(globalElo(elo, 8), 95);
     expect(globalElo(elo, 9), isNull);
+  });
+
+  test('eloDeltas gives the change of player 1 at each game', () {
+    final games = [g(1, 1, 2, 3, 1), g(1, 2, 1, 0, 0), g(2, 1, 2, 0, 5)];
+    final deltas = eloDeltas(games);
+    expect(deltas, hasLength(3));
+    expect(deltas[0], 50); // victoire entre égaux
+    // Nul : le moins bien classé (2, à 950) gagne un peu.
+    expect(deltas[1], greaterThan(0));
+    expect(deltas[2], -50); // autre jeu : défaite entre égaux
   });
 }

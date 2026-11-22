@@ -37,7 +37,7 @@ class SectionButtons extends StatelessWidget {
   }
 }
 
-/// Barre blanche, à coins arrondis et légère ombre comme les cartes, qui
+/// Barre sombre, à coins arrondis, liseré et légère ombre comme les cartes, qui
 /// prend toute la largeur disponible et centre ses boutons.
 class SectionBar extends StatelessWidget {
   const SectionBar({super.key, required this.child});
@@ -56,6 +56,11 @@ class SectionBar extends StatelessWidget {
         color: topBarColor,
         borderRadius: BorderRadius.circular(8),
         boxShadow: lightShadow,
+      ),
+      // Liseré dessiné par-dessus : il ne décale pas les boutons.
+      foregroundDecoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: edgeColor),
       ),
       child: Center(child: child),
     );

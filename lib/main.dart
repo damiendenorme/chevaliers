@@ -25,27 +25,14 @@ class MyApp extends StatelessWidget {
       title: 'Les Chevaliers',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
+        // Thème sombre, aux tons chauds (bronze) : texte clair sur les cartes
+        // sombres.
         colorScheme: .fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: Brightness.light,
+          seedColor: const Color(0xFF8B6B3D),
+          brightness: Brightness.dark,
         ),
-        // Fond gris très clair, avec une pointe de bleu.
-        scaffoldBackgroundColor: const Color(0xFFE9ECF2),
+        // Presque noir (bannières vides).
+        scaffoldBackgroundColor: const Color(0xFF120F0D),
       ),
       home: const MyHomePage(),
     );

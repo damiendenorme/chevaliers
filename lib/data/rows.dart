@@ -53,9 +53,9 @@ class RowTable {
 
   /// Parties listées en bas du détail de chaque ligne (pour les joueurs :
   /// les siennes, de la plus récente à la plus ancienne).
-  final List<List<Matchup>>? matchLists;
+  final List<List<MatchDetail>>? matchLists;
 
-  List<Matchup> matchList(int index) => matchLists?[index] ?? const [];
+  List<MatchDetail> matchList(int index) => matchLists?[index] ?? const [];
 
   /// Chemin d'asset de l'image de bannière de chaque ligne (voir
   /// [bannerAsset]). Le fichier peut ne pas exister.
@@ -116,26 +116,46 @@ int? globalElo(Map<int, Map<int, double>> elo, int player) {
 /// Une partie dans la liste : joueur 1, scores, joueur 2.
 typedef Matchup = ({String player1, int score1, int score2, String player2});
 
+/// Une partie dans le détail d'un joueur : sa date, la partie, son jeu, son
+/// lieu et
+/// l'évolution du ELO du joueur 1 (celle du joueur 2 est l'opposée).
+typedef MatchDetail = ({
+  DateTime date,
+  Matchup matchup,
+  String game,
+  String? place,
+  double eloDelta1,
+});
+
 /// Chemin d'asset de la bannière d'une ligne : `assets/bannieres/<table>/<id>.jpg`.
 String bannerAsset(String table, int id) => 'assets/bannieres/$table/$id.jpg';
 
-/// Toutes les parties, dans l'ordre chronologique, pour le calcul du ELO.
-Future<List<EloGame>> _fetchEloGames(SupabaseClient db) async {
+/// Toutes les parties, dans l'ordre chronologique, pour le calcul du ELO,
+/// avec le lieu et la date de chacune (même ordre).
+Future<({List<EloGame> games, List<String?> places, List<DateTime> dates})>
+_fetchGames(SupabaseClient db) async {
   final rows = await db
       .from('partie')
-      .select('jeu_id, joueur1_id, joueur2_id, score_joueur1, score_joueur2')
+      .select(
+        'jeu_id, joueur1_id, joueur2_id, score_joueur1, score_joueur2, lieu, '
+        'created_at',
+      )
       .order('created_at', ascending: true)
       .order('id', ascending: true);
-  return [
-    for (final r in rows)
-      (
-        game: r['jeu_id'] as int,
-        player1: r['joueur1_id'] as int,
-        player2: r['joueur2_id'] as int,
-        score1: r['score_joueur1'] as int,
-        score2: r['score_joueur2'] as int,
-      ),
-  ];
+  return (
+    games: [
+      for (final r in rows)
+        (
+          game: r['jeu_id'] as int,
+          player1: r['joueur1_id'] as int,
+          player2: r['joueur2_id'] as int,
+          score1: r['score_joueur1'] as int,
+          score2: r['score_joueur2'] as int,
+        ),
+    ],
+    places: [for (final r in rows) r['lieu'] as String?],
+    dates: [for (final r in rows) DateTime.parse(r['created_at'] as String)],
+  );
 }
 
 /// Lignes d'une table de la base, mises en colonnes.
@@ -184,12 +204,13 @@ Future<RowTable> fetchRows(String table) async {
   }
 
   if (table == 'joueur') {
-    final (players, boardGames, games) = await (
+    final (players, boardGames, (:games, :places, :dates)) = await (
       db.from('joueur').select('id, nom').order('nom', ascending: true),
       db.from('jeu').select('id, nom').order('nom', ascending: true),
-      _fetchEloGames(db),
+      _fetchGames(db),
     ).wait;
     final elo = computeElo(games);
+    final deltas = eloDeltas(games);
     final gameNames = {
       for (final j in boardGames) j['id'] as int: j['nom'] as String,
     };
@@ -218,13 +239,19 @@ Future<RowTable> fetchRows(String table) async {
       matchLists: [
         for (final p in players)
           [
-            for (final g in games.reversed)
+            for (final (i, g) in games.indexed.toList().reversed)
               if (g.player1 == p['id'] || g.player2 == p['id'])
                 (
-                  player1: playerNames[g.player1]!,
-                  score1: g.score1,
-                  score2: g.score2,
-                  player2: playerNames[g.player2]!,
+                  date: dates[i],
+                  matchup: (
+                    player1: playerNames[g.player1]!,
+                    score1: g.score1,
+                    score2: g.score2,
+                    player2: playerNames[g.player2]!,
+                  ),
+                  game: gameNames[g.game]!,
+                  place: places[i],
+                  eloDelta1: deltas[i],
                 ),
           ],
       ],
@@ -240,10 +267,10 @@ Future<RowTable> fetchRows(String table) async {
   }
 
   if (table == 'jeu') {
-    final (boardGames, players, games) = await (
+    final (boardGames, players, (:games, places: _, dates: _)) = await (
       db.from('jeu').select('id, nom').order('nom', ascending: true),
       db.from('joueur').select('id, nom').order('nom', ascending: true),
-      _fetchEloGames(db),
+      _fetchGames(db),
     ).wait;
     final elo = computeElo(games);
     return RowTable(

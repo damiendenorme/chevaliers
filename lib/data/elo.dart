@@ -1,10 +1,10 @@
 import 'dart:math';
 
 /// ELO de départ de tout joueur, pour chaque jeu.
-const double eloStart = 100;
+const double eloStart = 1000;
 
 /// Facteur K : points au plus gagnés ou perdus en une partie.
-const double eloK = 10;
+const double eloK = 100;
 
 /// Une partie jouée, pour le calcul du ELO.
 typedef EloGame = ({
@@ -21,8 +21,19 @@ typedef EloGame = ({
 /// Chaque jeu a son propre classement. Un joueur absent de la carte d'un jeu
 /// n'y a jamais joué : son ELO y est [eloStart]. Le meilleur score gagne ;
 /// à scores égaux, c'est un match nul.
-Map<int, Map<int, double>> computeElo(Iterable<EloGame> games) {
+Map<int, Map<int, double>> computeElo(Iterable<EloGame> games) =>
+    _replay(games).elo;
+
+/// Évolution du ELO du joueur 1 à chaque partie de [games] (dans le même
+/// ordre, chronologique) ; celle du joueur 2 est l'opposée.
+List<double> eloDeltas(Iterable<EloGame> games) => _replay(games).deltas;
+
+/// Rejoue les parties dans l'ordre : ELO final et évolution à chaque partie.
+({Map<int, Map<int, double>> elo, List<double> deltas}) _replay(
+  Iterable<EloGame> games,
+) {
   final elo = <int, Map<int, double>>{};
+  final deltas = <double>[];
   for (final g in games) {
     final ratings = elo.putIfAbsent(g.game, () => {});
     final r1 = ratings[g.player1] ?? eloStart;
@@ -36,8 +47,9 @@ Map<int, Map<int, double>> computeElo(Iterable<EloGame> games) {
     final delta = eloK * (actual1 - expected1);
     ratings[g.player1] = r1 + delta;
     ratings[g.player2] = r2 - delta;
+    deltas.add(delta);
   }
-  return elo;
+  return (elo: elo, deltas: deltas);
 }
 
 /// ELO de [player] au jeu [game], tel qu'affiché (arrondi à l'unité).
