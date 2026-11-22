@@ -6,106 +6,14 @@ import 'package:chevaliers/data/rows.dart';
 import 'package:chevaliers/main.dart';
 import 'package:chevaliers/widgets/row_list.dart';
 import 'package:chevaliers/widgets/section_buttons.dart';
-import 'package:chevaliers/widgets/top_bar.dart';
 
 void main() {
-  testWidgets('Counters are hidden and not loaded by default', (tester) async {
-    var loads = 0;
-    Future<int> count() async {
-      loads++;
-      return 1;
-    }
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MyHomePage(
-          loadPlayerCount: count,
-          loadEventCount: count,
-          loadGameCount: count,
-          loadBoardGameCount: count,
-        ),
-      ),
-    );
-    await tester.pump();
-
-    expect(find.byType(TopBarInfo), findsNothing);
-    expect(find.text('–'), findsNothing);
-    expect(loads, 0);
-    expect(find.text('Les Chevaliers'), findsOneWidget);
-    expect(find.text('Discord'), findsOneWidget);
-  });
-
-  testWidgets('When shown, top bar counters are in order', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MyHomePage(
-          showCounters: true,
-          loadPlayerCount: () async => 42,
-          loadEventCount: () async => 3,
-          loadGameCount: () async => 5,
-          loadBoardGameCount: () async => 8,
-        ),
-      ),
-    );
-
-    Finder inBar(IconData icon) =>
-        find.descendant(of: find.byType(TopBar), matching: find.byIcon(icon));
-
-    // Pendant le chargement : un tiret par compteur.
-    expect(find.text('–'), findsNWidgets(4));
-
-    await tester.pump();
-
-    expect(find.text('42'), findsOneWidget);
-    expect(find.text('3'), findsOneWidget);
-    expect(inBar(Icons.person), findsOneWidget);
-    expect(inBar(Icons.confirmation_number), findsOneWidget);
-    expect(find.text('5'), findsOneWidget);
-    expect(inBar(Icons.flag), findsOneWidget);
-    expect(find.text('8'), findsOneWidget);
-    expect(inBar(Icons.casino), findsOneWidget);
-    expect(
-      tester.getCenter(find.text('3')).dx,
-      greaterThan(tester.getCenter(find.text('42')).dx),
-    );
-    expect(
-      tester.getCenter(find.text('5')).dx,
-      greaterThan(tester.getCenter(find.text('3')).dx),
-    );
-    expect(
-      tester.getCenter(find.text('8')).dx,
-      greaterThan(tester.getCenter(find.text('5')).dx),
-    );
-
-    // Titre à gauche de la barre.
-    final title = tester.getRect(find.text('Les Chevaliers'));
-    expect(title.left, lessThan(50));
-    expect(title.right, lessThan(tester.getRect(inBar(Icons.person)).left));
-
-    // « Discord » à droite de la barre.
-    final discord = tester.getRect(find.text('Discord'));
-    expect(
-      discord.right,
-      greaterThan(
-        tester.view.physicalSize.width / tester.view.devicePixelRatio - 50,
-      ),
-    );
-    expect(
-      discord.left,
-      greaterThan(tester.getRect(inBar(Icons.casino)).right),
-    );
-  });
-
-  testWidgets('Fixed footer at the bottom, same size as the header', (
+  testWidgets('No header or footer; the table scrolls, not the screen', (
     tester,
   ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: MyHomePage(
-          loadPlayerCount: () async => 0,
-          loadEventCount: () async => 0,
-          loadGameCount: () async => 0,
-          loadBoardGameCount: () async => 0,
           loadRows: (_) async => RowTable(
             columns: const ['Nom'],
             rows: [
@@ -116,24 +24,20 @@ void main() {
       ),
     );
     await tester.pump();
+    expect(find.text('Les Chevaliers'), findsNothing);
+    expect(find.text('Discord'), findsNothing);
 
     final screen = tester.getRect(find.byType(MyHomePage));
-    final header = tester.getRect(find.byType(TopBar));
-    final footer = tester.getRect(find.byType(BottomBar));
-    expect(footer.size, header.size);
-    expect(footer.bottom, screen.bottom);
-
-    // Même avec une longue liste, le pied de page reste en bas.
     await tester.tap(find.byType(SectionButton).first);
     await tester.pumpAndSettle();
     expect(find.text('Joueur 0'), findsOneWidget);
-    expect(tester.getRect(find.byType(BottomBar)), footer);
 
-    // Pied du tableau : même distance au footer que celle entre la barre du
-    // haut et les boutons.
+    // Boutons à 12 + 52px du haut de l'écran ; pied du tableau à la même
+    // distance du bas.
     final buttonsTop = tester.getRect(find.byType(SectionButton).first).top;
     final tableBox = tester.getRect(find.byType(RowList));
-    expect(footer.top - tableBox.bottom, buttonsTop - header.bottom);
+    expect(buttonsTop, screen.top + 12 + 52);
+    expect(screen.bottom - tableBox.bottom, buttonsTop - screen.top);
 
     // C'est la liste qui défile, pas l'écran.
     final firstRowBefore = tester.getRect(find.text('Joueur 0')).top;
@@ -141,9 +45,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.getRect(find.text('Joueur 0')).top, lessThan(firstRowBefore));
     expect(tester.getRect(find.byType(RowList)), tableBox);
-    expect(tester.getRect(find.byType(TopBar)), header);
     expect(tester.getRect(find.byType(SectionButton).first).top, buttonsTop);
-    expect(tester.getRect(find.byType(BottomBar)), footer);
   });
 
   testWidgets('Round buttons form a horizontal row above the tables', (
@@ -152,10 +54,6 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: MyHomePage(
-          loadPlayerCount: () async => 0,
-          loadEventCount: () async => 0,
-          loadGameCount: () async => 0,
-          loadBoardGameCount: () async => 0,
           loadRows: (_) async => const RowTable(columns: ['Nom'], rows: []),
         ),
       ),
@@ -193,10 +91,6 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: MyHomePage(
-          loadPlayerCount: () async => 0,
-          loadEventCount: () async => 0,
-          loadGameCount: () async => 0,
-          loadBoardGameCount: () async => 0,
           loadRows: (table) async {
             requested.add(table);
             return switch (table) {
@@ -228,7 +122,10 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('Arthur'), findsNothing);
+    // Au démarrage : la liste des parties.
+    expect(requested, ['partie']);
+    expect(find.text('–'), findsOneWidget);
+    expect(find.text('Lancelot'), findsOneWidget);
 
     final buttons = find.byType(SectionButton);
 
@@ -240,7 +137,6 @@ void main() {
     expect(find.text('Jeu favori'), findsNothing);
     // Zone de 1000px, centrée horizontalement.
     final playersTable = tester.getRect(find.byType(RowList));
-    final barBottom = tester.getRect(find.byType(TopBar)).bottom;
     expect(playersTable.width, 1000);
     expect(playersTable.center.dx, moreOrLessEquals(1400 / 2));
     expect(tester.getRect(find.text('Arthur')).left, playersTable.left + 12);
@@ -265,14 +161,14 @@ void main() {
     expect(label.top, greaterThanOrEqualTo(playersTable.top + 160));
 
     // Boutons centrés sur le tableau, restés à leur place (52px + 12px sous
-    // la barre).
+    // le haut de l'écran).
     final firstButton = tester.getRect(buttons.at(0));
     final lastButton = tester.getRect(buttons.at(3));
     expect(
       (firstButton.left + lastButton.right) / 2,
       moreOrLessEquals(playersTable.center.dx),
     );
-    expect(firstButton.top, barBottom + 12 + 52);
+    expect(firstButton.top, 12 + 52);
     // Tableau 20px sous les boutons.
     expect(playersTable.top - firstButton.bottom, 20);
 
@@ -319,7 +215,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Aucune ligne.'), findsOneWidget);
 
-    expect(requested, ['joueur', 'partie', 'jeu']);
+    expect(requested, ['partie', 'joueur', 'partie', 'jeu']);
   });
 
   testWidgets('A game detail ranks players in a list like the master one', (

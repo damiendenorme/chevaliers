@@ -5,7 +5,6 @@ import 'data/rows.dart';
 import 'supabase_config.dart';
 import 'widgets/row_list.dart';
 import 'widgets/section_buttons.dart';
-import 'widgets/top_bar.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,22 +14,6 @@ Future<void> main() async {
   );
   runApp(const MyApp());
 }
-
-/// Nombre de lignes dans la table `joueur`.
-Future<int> fetchPlayerCount() =>
-    Supabase.instance.client.from('joueur').count(CountOption.exact);
-
-/// Nombre de lignes dans la table `evenement`.
-Future<int> fetchEventCount() =>
-    Supabase.instance.client.from('evenement').count(CountOption.exact);
-
-/// Nombre de lignes dans la table `partie`.
-Future<int> fetchGameCount() =>
-    Supabase.instance.client.from('partie').count(CountOption.exact);
-
-/// Nombre de lignes dans la table `jeu`.
-Future<int> fetchBoardGameCount() =>
-    Supabase.instance.client.from('jeu').count(CountOption.exact);
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -70,36 +53,15 @@ class MyApp extends StatelessWidget {
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({
-    super.key,
-    this.loadPlayerCount = fetchPlayerCount,
-    this.loadEventCount = fetchEventCount,
-    this.loadGameCount = fetchGameCount,
-    this.loadBoardGameCount = fetchBoardGameCount,
-    this.loadRows = fetchRows,
-    this.showCounters = false,
-  });
+  const MyHomePage({super.key, this.loadRows = fetchRows});
 
-  final Future<int> Function() loadPlayerCount;
-  final Future<int> Function() loadEventCount;
-  final Future<int> Function() loadGameCount;
-  final Future<int> Function() loadBoardGameCount;
   final Future<RowTable> Function(String table) loadRows;
-
-  /// Affiche les compteurs dans la barre du haut. Cachés pour l'instant ;
-  /// tant qu'ils sont cachés, les nombres ne sont pas chargés.
-  final bool showCounters;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  late final Future<int> _playerCount = widget.loadPlayerCount();
-  late final Future<int> _eventCount = widget.loadEventCount();
-  late final Future<int> _gameCount = widget.loadGameCount();
-  late final Future<int> _boardGameCount = widget.loadBoardGameCount();
-
   /// Boutons au-dessus des tableaux : icône, libellé et table affichée au clic.
   static const _sections = [
     (Icons.person, 'Joueurs', 'joueur'),
@@ -108,8 +70,8 @@ class _MyHomePageState extends State<MyHomePage> {
     (Icons.casino, 'Jeux', 'jeu'),
   ];
 
-  // Distances mesurées depuis le haut de la zone (sous la barre et sa marge
-  // de 12px). Boutons et tableau se règlent indépendamment.
+  // Distances mesurées depuis le haut de la zone (sous sa marge de 12px).
+  // Boutons et tableau se règlent indépendamment.
 
   /// Haut de la rangée de boutons.
   static const double _buttonsTop = 52;
@@ -117,8 +79,11 @@ class _MyHomePageState extends State<MyHomePage> {
   /// Écart entre les boutons et le tableau.
   static const double _tableGap = 20;
 
-  /// Lignes de la table choisie, ou null tant qu'aucun bouton n'a été cliqué.
-  Future<RowTable>? _rows;
+  /// Section affichée au démarrage : les parties.
+  static const _startSection = 2;
+
+  /// Lignes de la table affichée.
+  late Future<RowTable> _rows = widget.loadRows(_sections[_startSection].$3);
 
   void _showTable(int index) {
     final rows = widget.loadRows(_sections[index].$3);
@@ -127,76 +92,59 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  Widget _counter(Future<int> future, IconData icon, String tooltip) {
-    return FutureBuilder<int>(
-      future: future,
-      builder: (context, snapshot) =>
-          TopBarInfo(icon: icon, value: snapshot.data, tooltip: tooltip),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            TopBar(
-              title: 'Les Chevaliers',
-              trailing: 'Discord',
-              items: [
-                if (widget.showCounters) ...[
-                  _counter(_playerCount, Icons.person, 'Joueurs'),
-                  _counter(
-                    _eventCount,
-                    Icons.confirmation_number,
-                    'Événements',
-                  ),
-                  _counter(_gameCount, Icons.flag, 'Parties'),
-                  _counter(_boardGameCount, Icons.casino, 'Jeux'),
-                ],
-              ],
-            ),
-            // Colonne de 1000px centrée : boutons centrés en haut, tableaux
-            // dessous, chacun toujours au même emplacement.
-            Expanded(
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: Padding(
-                  // En bas, la même distance que celle entre la barre du haut
-                  // et les boutons : le pied du tableau reste fixe.
-                  padding: const EdgeInsets.fromLTRB(
-                    12,
-                    12,
-                    12,
-                    12 + _buttonsTop,
-                  ),
-                  child: SizedBox(
-                    width: RowList.width,
-                    child: Column(
-                      children: [
-                        const SizedBox(height: _buttonsTop),
-                        SectionButtons(
-                          buttons: [
-                            for (final (icon, label, _) in _sections)
-                              (icon, label),
-                          ],
-                          onPressed: _showTable,
-                        ),
-                        const SizedBox(height: _tableGap),
-                        if (_rows != null)
-                          Expanded(
-                            child: RowList(key: ObjectKey(_rows), rows: _rows!),
+      // Image de fond sur tout l'écran, recadrée pour le couvrir. Copie à
+      // 2560px de large de assets/Table.png (14173px, 27 Mo).
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/Table.jpg'),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Colonne de 1000px centrée : boutons centrés en haut, tableaux
+              // dessous, chacun toujours au même emplacement.
+              Expanded(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Padding(
+                    // En bas, la même distance que celle entre le haut de
+                    // l'écran et les boutons : le pied du tableau reste fixe.
+                    padding: const EdgeInsets.fromLTRB(
+                      12,
+                      12,
+                      12,
+                      12 + _buttonsTop,
+                    ),
+                    child: SizedBox(
+                      width: RowList.width,
+                      child: Column(
+                        children: [
+                          const SizedBox(height: _buttonsTop),
+                          SectionButtons(
+                            buttons: [
+                              for (final (icon, label, _) in _sections)
+                                (icon, label),
+                            ],
+                            onPressed: _showTable,
                           ),
-                      ],
+                          const SizedBox(height: _tableGap),
+                          Expanded(
+                            child: RowList(key: ObjectKey(_rows), rows: _rows),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            // Pied de page fixe : toujours en bas de l'écran.
-            const BottomBar(),
-          ],
+            ],
+          ),
         ),
       ),
     );

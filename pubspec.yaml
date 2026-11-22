@@ -60,6 +60,7 @@ flutter:
 
   # Bannières du détail : assets/bannieres/<table>/<id>.jpg
   assets:
+    - assets/Table.jpg
     - assets/bannieres/joueur/
     - assets/bannieres/evenement/
     - assets/bannieres/partie/
