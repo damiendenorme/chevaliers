@@ -43,9 +43,18 @@ const lightShadow = [
 /// bronze en relief et légère ombre ; son contenu (ligne active, survol) est
 /// découpé avec.
 class CardSurface extends StatelessWidget {
-  const CardSurface(this.child, {super.key, this.inset = true});
+  const CardSurface(
+    this.child, {
+    super.key,
+    this.inset = true,
+    this.fit = BoxFit.fill,
+  });
 
   final Widget child;
+
+  /// Cadrage de l'image : étirée par défaut, pour que son cadre suive les
+  /// bords ; [BoxFit.cover] pour la garder dans ses proportions.
+  final BoxFit fit;
 
   /// Ombre portée interne en haut (effet de creux). Sans elle, la carte ne
   /// paraît pas enfoncée.
@@ -70,7 +79,7 @@ class CardSurface extends StatelessWidget {
               color: topBarColor,
               image: DecorationImage(
                 image: const AssetImage('assets/Carte.jpg'),
-                fit: BoxFit.fill,
+                fit: fit,
                 colorFilter: ColorFilter.mode(
                   Colors.black.withValues(alpha: 0.72),
                   BlendMode.srcATop,

@@ -73,7 +73,11 @@ class _Cards extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: RowList.gap,
       children: [
-        SizedBox(width: RowList.listWidth, child: CardSurface(master)),
+        // Carte étroite : son image garde ses proportions, sans être étirée.
+        SizedBox(
+          width: RowList.listWidth,
+          child: CardSurface(master, fit: BoxFit.cover),
+        ),
         Expanded(child: CardSurface(detail ?? const SizedBox.shrink())),
       ],
     );
