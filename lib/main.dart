@@ -86,6 +86,8 @@ Future<void> addRpgEvent(String name, DateTime? date) =>
 Future<void> addRpgGame(String name) => addGame(name, prefix: 'rpg_');
 Future<void> saveRpgSummary(int partyId, String? text) =>
     saveSummary(partyId, text, prefix: 'rpg_');
+Future<String?> pickAndUploadRpgPhoto(int partyId) =>
+    pickAndUploadPhoto(partyId, prefix: 'rpg_');
 
 /// L'écran : le fond, les marque-pages Wargame et RPG à gauche, Discord en
 /// haut à droite, et la page du marque-page choisi. Chaque page a ses
@@ -110,7 +112,21 @@ class MyHomePage extends StatefulWidget {
     this.loadRpgPartyOptions = fetchRpgPartyOptions,
     this.writeSummary = saveSummary,
     this.writeRpgSummary = saveRpgSummary,
+    this.uploadPhoto = pickAndUploadPhoto,
+    this.uploadRpgPhoto = pickAndUploadRpgPhoto,
+    this.rpgGuests = (
+      players: fetchRpgPlayers,
+      add: addRpgGuest,
+      remove: removeRpgGuest,
+    ),
   });
+
+  /// Modification des joueurs d'une partie de JDR (backoffice).
+  final GuestEditor rpgGuests;
+
+  /// Ajout d'une photo à une partie (backoffice), au Wargame et au RPG.
+  final Future<String?> Function(int partyId) uploadPhoto;
+  final Future<String?> Function(int partyId) uploadRpgPhoto;
 
   /// Enregistrement du résumé d'une partie (backoffice), au Wargame et au
   /// RPG.
@@ -212,6 +228,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       addParty: widget.saveParty,
                       loadPartyOptions: widget.loadPartyOptions,
                       saveSummary: widget.writeSummary,
+                      addPhoto: widget.uploadPhoto,
                     ),
                   ),
                   // RPG : accentuation bronze.
@@ -227,6 +244,8 @@ class _MyHomePageState extends State<MyHomePage> {
                       addRpgParty: widget.saveRpgParty,
                       loadRpgPartyOptions: widget.loadRpgPartyOptions,
                       saveSummary: widget.writeRpgSummary,
+                      addPhoto: widget.uploadRpgPhoto,
+                      guestEditor: widget.rpgGuests,
                     ),
                   ),
                 ],
@@ -329,6 +348,8 @@ class GamePage extends StatefulWidget {
     required this.addEvent,
     required this.addGame,
     required this.saveSummary,
+    required this.addPhoto,
+    this.guestEditor,
     this.addParty,
     this.loadPartyOptions,
     this.addRpgParty,
@@ -349,6 +370,12 @@ class GamePage extends StatefulWidget {
 
   /// Enregistrement du résumé d'une partie de la page.
   final Future<void> Function(int partyId, String? text) saveSummary;
+
+  /// Ajout d'une photo à une partie de la page.
+  final Future<String?> Function(int partyId) addPhoto;
+
+  /// Modification des joueurs d'une partie (JDR) ; null : pas sur cette page.
+  final GuestEditor? guestEditor;
 
   /// Ajout d'un événement dans les données de la page.
   final Future<void> Function(String name, DateTime? date) addEvent;
@@ -538,6 +565,10 @@ class _GamePageState extends State<GamePage> {
                               onEditSummary: signedIn
                                   ? widget.saveSummary
                                   : null,
+                              // Connecté : ajout de photos aux parties.
+                              onAddPhoto: signedIn ? widget.addPhoto : null,
+                              // Connecté : joueurs des parties de JDR.
+                              guestEditor: signedIn ? widget.guestEditor : null,
                             );
                           },
                         ),

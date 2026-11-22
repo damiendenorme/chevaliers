@@ -607,11 +607,14 @@ void main() {
     );
   });
 
-  testWidgets('A party detail has a photo zone', (tester) async {
+  testWidgets('A party detail photo zone: nothing signed out when empty', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1400, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
+    final auth = FakeAuth();
     final detail = (
       date: DateTime(2026, 11, 21),
       matchup: (player1: 'Arthur', score1: 3, score2: 2, player2: 'Bors'),
@@ -638,7 +641,9 @@ void main() {
             matchups: [detail.matchup],
             matchDetails: [detail],
             photos: const [[]],
+            partyIds: const [7],
           ),
+          auth: auth,
         ),
       ),
     );
@@ -646,18 +651,22 @@ void main() {
     await tester.tap(find.text('Arthur'));
     await tester.pump();
 
-    // Sous la partie : la zone de photos, vide ici, sans titre. Son message
-    // est centré dans la place qui reste, en bas de la carte du détail.
+    // Déconnecté, sans photo : rien.
+    expect(find.text('Aucune photo.'), findsNothing);
+
+    // Connecté : la zone de photos, vide ici, sans titre. Son message est
+    // centré dans la place qui reste, en bas de la carte du détail.
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
     expect(find.text('Photos'), findsNothing);
     final message = tester.getRect(find.text('Aucune photo.'));
     final card = tester.getRect(find.byType(RowList));
     final detailLeft = card.left + RowList.listWidth + RowList.gap;
     expect(message.center.dx, moreOrLessEquals((detailLeft + card.right) / 2));
+    // Vers le milieu de la place qui reste (avec le bouton « + » dessous).
     final scoreBottom = tester.getRect(find.text('3').last).bottom;
-    expect(
-      message.center.dy,
-      moreOrLessEquals((scoreBottom + 16 + card.bottom) / 2, epsilon: 1),
-    );
+    expect(message.top, greaterThan(scoreBottom));
+    expect(message.bottom, lessThan((scoreBottom + card.bottom) / 2 + 20));
   });
 
   testWidgets('Events show their date and sort by name or date', (
@@ -1385,11 +1394,13 @@ void main() {
     }
 
     await choose('Jeu', 'Pendragon');
-    await choose('MJ', 'Merlin');
-    // Le MJ n'est pas proposé parmi les joueurs.
-    expect(find.widgetWithText(FilterChip, 'Merlin'), findsNothing);
-    await tester.tap(find.widgetWithText(FilterChip, 'Morgane'));
-    await tester.tap(find.widgetWithText(FilterChip, 'Perceval'));
+    // MJ à cocher : Merlin. Il n'est alors plus proposé parmi les joueurs.
+    expect(find.widgetWithText(FilterChip, 'Merlin'), findsNWidgets(2));
+    await tester.tap(find.widgetWithText(FilterChip, 'Merlin').first);
+    await tester.pump();
+    expect(find.widgetWithText(FilterChip, 'Merlin'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilterChip, 'Morgane').last);
+    await tester.tap(find.widgetWithText(FilterChip, 'Perceval').last);
     await tester.pump();
     await choose('Événement (facultatif)', 'Trench Crusade');
     await tester.enterText(
@@ -1401,13 +1412,14 @@ void main() {
 
     expect(find.text('Nouvelle partie'), findsNothing);
     final p = parties.single;
-    expect((p.game, p.gm, p.place, p.event), (4, 1, null, 6));
+    expect((p.game, p.place, p.event), (4, null, 6));
+    expect(p.gms, [1]);
     expect(p.scenario, 'La Tombe de M. Eustache');
     expect(p.guests..sort(), [2, 3]);
     expect(p.date, DateUtils.dateOnly(DateTime.now()));
   });
 
-  testWidgets('An RPG event detail lists its players with their banners', (
+  testWidgets('An RPG event detail lists players and their party counts', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1400, 800);
@@ -1420,11 +1432,26 @@ void main() {
           loadRpgRows: (_) async => RowTable(
             columns: const ['Nom'],
             rows: const [
-              ['Trench Crusade'],
+              ['Paris Éternité'],
             ],
             dates: [DateTime(2027, 12)],
-            playerBanners: const [
-              [(2, 'Irongab'), (6, 'Andracifus')],
+            eventDetails: const [
+              (
+                players: [
+                  (id: 1, name: 'Pokinano', parties: 2),
+                  (id: 6, name: 'Andracifus', parties: 5),
+                  (id: 2, name: 'Irongab', parties: 1),
+                ],
+              ),
+            ],
+            sessionLines: const [
+              [
+                (
+                  label: '28.11.2026 La Crypte des Goules (Paris Éternité 1)',
+                  gms: [(1, 'Pokinano')],
+                  guests: [(6, 'Andracifus')],
+                ),
+              ],
             ],
           ),
         ),
@@ -1432,21 +1459,55 @@ void main() {
     );
     await tester.tap(find.text('RPG'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Trench Crusade'));
+    await tester.tap(find.text('Paris Éternité'));
     await tester.pumpAndSettle();
 
-    // Pas de date dans le détail (seulement dans la liste) ; les joueurs.
+    // Pas de date dans le détail (seulement dans la liste), ni de rôle.
     expect(find.text('Décembre 2027'), findsOneWidget);
-    expect(find.text('Date'), findsOneWidget); // l'en-tête de la liste
-    // Seulement les bannières, sans les noms.
-    expect(find.text('2'), findsOneWidget);
-    expect(find.text('6'), findsOneWidget);
-    expect(find.text('Irongab'), findsNothing);
-    expect(find.text('Andracifus'), findsNothing);
-    expect(
-      tester.getRect(find.text('6')).left,
-      greaterThan(tester.getRect(find.text('2')).right),
+    // Sous les joueurs, ses parties, comme dans le détail d'un jeu.
+    final party = find.text(
+      '28.11.2026 La Crypte des Goules (Paris Éternité 1)',
     );
+    expect(party, findsOneWidget);
+    expect(
+      tester.getRect(party).top,
+      greaterThan(tester.getRect(find.text('Pokinano')).bottom),
+    );
+    expect(find.text('MJ'), findsNothing);
+    // À droite de chaque ligne : le nombre de parties jouées.
+    final name = tester.getRect(find.text('Andracifus'));
+    final count = tester.getRect(find.text('5'));
+    expect(count.left, greaterThan(name.right));
+    expect(count.center.dy, moreOrLessEquals(name.center.dy, epsilon: 2));
+
+    List<String> order() => ['Andracifus', 'Irongab', 'Pokinano']
+      ..sort(
+        (a, b) => tester
+            .getRect(find.text(a))
+            .top
+            .compareTo(tester.getRect(find.text(b)).top),
+      );
+    final partiesHeader = find.descendant(
+      of: find.byType(RowList),
+      matching: find.text('Parties'),
+    );
+    final nameHeaders = find.descendant(
+      of: find.byType(RowList),
+      matching: find.text('Nom'),
+    );
+
+    // Par nom au départ ; par nombre de parties (décroissant, puis
+    // croissant) ; retour au nom.
+    expect(order(), ['Andracifus', 'Irongab', 'Pokinano']);
+    await tester.tap(partiesHeader);
+    await tester.pump();
+    expect(order(), ['Andracifus', 'Pokinano', 'Irongab']);
+    await tester.tap(partiesHeader);
+    await tester.pump();
+    expect(order(), ['Irongab', 'Pokinano', 'Andracifus']);
+    await tester.tap(nameHeaders.last);
+    await tester.pump();
+    expect(order(), ['Andracifus', 'Irongab', 'Pokinano']);
   });
 
   testWidgets('An RPG party detail: date, scenario, place, then players', (
@@ -1472,7 +1533,7 @@ void main() {
                 scenario: 'La Tombe de M. Eustache',
                 place: 'Aumes',
                 event: 'Paris Éternité',
-                gm: (1, 'Merlin'),
+                gms: [(1, 'Merlin')],
                 guests: [(2, 'Morgane'), (3, 'Perceval')],
               ),
             ],
@@ -1524,7 +1585,7 @@ void main() {
               [
                 (
                   label: '21/11/2026',
-                  gm: (1, 'Merlin'),
+                  gms: [(1, 'Merlin')],
                   guests: [(2, 'Morgane'), (3, 'Perceval')],
                 ),
               ],
@@ -1582,8 +1643,18 @@ void main() {
     await tester.tap(find.text('Excalibur'));
     await tester.pump();
 
-    // Entre les informations et les photos : le résumé, vide, sans titre ;
-    // son message centré dans la carte du détail.
+    // Bouton rond de modification du résumé.
+    final editButton = find.byWidgetPredicate(
+      (w) => w is AddButton && w.icon == Icons.edit,
+    );
+    // Déconnecté, sans résumé : rien (ni message, ni bouton).
+    expect(find.text('Aucun résumé.'), findsNothing);
+    expect(editButton, findsNothing);
+
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+    // Connecté : entre les informations et les photos, le résumé, vide,
+    // sans titre ; son message centré dans la carte du détail.
     expect(find.text('Résumé'), findsNothing);
     expect(find.text('Aucun résumé.'), findsOneWidget);
     final card = tester.getRect(find.byType(RowList));
@@ -1598,15 +1669,6 @@ void main() {
       tester.getRect(find.text('Aucun résumé.')).bottom,
       lessThan(tester.getRect(find.text('Aucune photo.')).top),
     );
-    // Bouton rond de modification du résumé.
-    final editButton = find.byWidgetPredicate(
-      (w) => w is AddButton && w.icon == Icons.edit,
-    );
-    // Déconnecté : pas de modification.
-    expect(editButton, findsNothing);
-
-    await auth.signIn('arthur@table.fr', 'excalibur');
-    await tester.pump();
     // Juste sous « Aucun résumé. », centré comme lui.
     final empty = tester.getRect(find.text('Aucun résumé.'));
     final button = tester.getRect(editButton);
@@ -1626,6 +1688,173 @@ void main() {
     // Affiché aussitôt, la partie reste sélectionnée.
     expect(find.text('Arthur tire l’épée du rocher.'), findsOneWidget);
     expect(find.text('Aucun résumé.'), findsNothing);
+  });
+
+  testWidgets('Signed in, a + under « Aucune photo. » adds a photo', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final uploads = <int>[];
+    final auth = FakeAuth();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => const RowTable(
+            columns: ['Nom'],
+            rows: [
+              ['Excalibur'],
+            ],
+            partyIds: [42],
+            photos: [[]],
+          ),
+          loadCounts: () async =>
+              (players: 0, events: 0, games: 1, boardGames: 0),
+          auth: auth,
+          uploadPhoto: (id) async {
+            uploads.add(id);
+            return 'https://example.com/photo.jpg';
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('Excalibur'));
+    await tester.pump();
+
+    final addPhoto = find.byWidgetPredicate(
+      (w) => w is AddButton && w.label == 'Ajouter une photo',
+    );
+    expect(addPhoto, findsNothing);
+
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+    // Sous « Aucune photo. », centré.
+    final empty = tester.getRect(find.text('Aucune photo.'));
+    final button = tester.getRect(addPhoto);
+    expect(button.top, greaterThan(empty.bottom));
+    expect(button.center.dx, moreOrLessEquals(empty.center.dx, epsilon: 1));
+
+    await tester.tap(addPhoto);
+    await tester.pump();
+    await tester.pump();
+    expect(uploads, [42]);
+    // La photo apparaît, la partie reste sélectionnée.
+    expect(find.text('Aucune photo.'), findsNothing);
+    expect(addPhoto, findsOneWidget);
+  });
+
+  testWidgets('Signed in, GMs and players of an RPG party can be edited', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final calls = <String>[];
+    final auth = FakeAuth();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRpgRows: (_) async => RowTable(
+            columns: const ['Jeu'],
+            rows: const [
+              ['Pendragon'],
+            ],
+            dates: [DateTime(2026, 11, 21)],
+            fullDates: true,
+            partyIds: const [9],
+            sessionDetails: [
+              (
+                date: DateTime(2026, 11, 21),
+                scenario: null,
+                place: null,
+                event: null,
+                gms: [(1, 'Merlin')],
+                guests: [(2, 'Morgane'), (3, 'Perceval')],
+              ),
+            ],
+          ),
+          loadRpgCounts: () async =>
+              (players: 4, events: 0, games: 1, boardGames: 1),
+          auth: auth,
+          rpgGuests: (
+            players: () async => [
+              (1, 'Merlin'),
+              (2, 'Morgane'),
+              (3, 'Perceval'),
+              (4, 'Gauvain'),
+            ],
+            add: (party, player, {required gm}) async =>
+                calls.add('add $party $player${gm ? ' MJ' : ''}'),
+            remove: (party, player) async => calls.add('remove $party $player'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('RPG'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pendragon'));
+    await tester.pumpAndSettle();
+
+    final remove = find.byTooltip('Retirer de la partie');
+    final add = find.byWidgetPredicate(
+      (w) => w is AddButton && w.label == 'Ajouter un joueur',
+    );
+    final addGm = find.byWidgetPredicate(
+      (w) => w is AddButton && w.label == 'Ajouter un MJ',
+    );
+    // Déconnecté : pas de modification.
+    expect(remove, findsNothing);
+    expect(add, findsNothing);
+    expect(addGm, findsNothing);
+
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+    // Un bouton de retrait par MJ et par joueur.
+    expect(remove, findsNWidgets(3));
+    expect(addGm, findsOneWidget);
+
+    // Retrait de Morgane (le MJ Merlin est en premier).
+    await tester.tap(remove.at(1));
+    await tester.pumpAndSettle();
+    expect(calls, ['remove 9 2']);
+    expect(find.text('Morgane'), findsNothing);
+    expect(find.text('Perceval'), findsOneWidget);
+
+    // Ajout : seuls les joueurs absents de la partie sont proposés.
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    final picker = find.ancestor(
+      of: find.text('Ajouter un joueur'),
+      matching: find.byType(Dialog),
+    );
+    Finder inPicker(String t) =>
+        find.descendant(of: picker, matching: find.text(t));
+    expect(inPicker('Merlin'), findsNothing);
+    expect(inPicker('Perceval'), findsNothing);
+    expect(inPicker('Morgane'), findsOneWidget);
+    await tester.tap(inPicker('Gauvain'));
+    await tester.pumpAndSettle();
+    expect(calls, ['remove 9 2', 'add 9 4']);
+    expect(find.text('Gauvain'), findsOneWidget);
+
+    // Ajout d'un second MJ : Morgane.
+    await tester.tap(addGm);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Morgane'));
+    await tester.pumpAndSettle();
+    expect(calls, ['remove 9 2', 'add 9 4', 'add 9 2 MJ']);
+    expect(find.text('MJ'), findsNWidgets(2));
+
+    // Retrait du MJ Merlin : une partie peut n'avoir aucun MJ… ou un autre.
+    await tester.tap(remove.first);
+    await tester.pumpAndSettle();
+    expect(calls.last, 'remove 9 1');
+    expect(find.text('Merlin'), findsNothing);
+    expect(find.text('MJ'), findsOneWidget);
   });
 
   testWidgets('Hovering a button does not animate or resize it', (

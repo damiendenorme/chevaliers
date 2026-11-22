@@ -4,8 +4,9 @@ import '../data/rows.dart';
 import '../data/rpg_rows.dart';
 import 'top_bar.dart';
 
-/// Fenêtre au design des cartes pour ajouter une partie de JDR : le jeu et
-/// le MJ (obligatoires), le scénario (facultatif), les joueurs (plusieurs), le lieu et
+/// Fenêtre au design des cartes pour ajouter une partie de JDR : le jeu
+/// (obligatoire), le scénario (facultatif), les MJ et les joueurs (de 0 à
+/// plusieurs), le lieu et
 /// l'événement (facultatifs), et la date (jour, mois, année ; aujourd'hui par
 /// défaut). Appelle [onSubmit], puis se ferme ; affiche l'erreur sinon.
 class RpgPartyDialog extends StatefulWidget {
@@ -24,7 +25,7 @@ class RpgPartyDialog extends StatefulWidget {
 
 class _RpgPartyDialogState extends State<RpgPartyDialog> {
   int? _game;
-  int? _gm;
+  final _gms = <int>{};
   final _guests = <int>{};
   int? _place;
   int? _event;
@@ -53,7 +54,6 @@ class _RpgPartyDialogState extends State<RpgPartyDialog> {
   Future<void> _submit() async {
     final error = switch (()) {
       _ when _game == null => 'Choisissez le jeu.',
-      _ when _gm == null => 'Choisissez le MJ.',
       _ => null,
     };
     if (error != null) {
@@ -67,11 +67,11 @@ class _RpgPartyDialogState extends State<RpgPartyDialog> {
     try {
       await widget.onSubmit((
         game: _game!,
-        gm: _gm!,
-        // Le MJ n'est pas compté parmi les joueurs.
+        gms: [..._gms],
+        // Un MJ n'est pas compté parmi les joueurs.
         guests: [
           for (final g in _guests)
-            if (g != _gm) g,
+            if (!_gms.contains(g)) g,
         ],
         place: _place,
         event: _event,
@@ -106,6 +106,35 @@ class _RpgPartyDialogState extends State<RpgPartyDialog> {
     ],
     onChanged: _busy ? null : onChanged,
   );
+
+  /// Un titre, puis un joueur par case à cocher, ajouté à [selected].
+  List<Widget> _chips({
+    required String title,
+    required List<(int, String)> players,
+    required Set<int> selected,
+    required Color accent,
+    required Color muted,
+  }) => [
+    Text(title, style: TextStyle(fontSize: 12, color: muted)),
+    Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final (id, name) in players)
+          FilterChip(
+            label: Text(name),
+            selected: selected.contains(id),
+            selectedColor: accent,
+            checkmarkColor: Colors.white,
+            onSelected: _busy
+                ? null
+                : (on) => setState(
+                    () => on ? selected.add(id) : selected.remove(id),
+                  ),
+          ),
+      ],
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -161,37 +190,24 @@ class _RpgPartyDialogState extends State<RpgPartyDialog> {
                         ),
                         enabled: !_busy,
                       ),
-                      _picker(
-                        label: 'MJ',
-                        items: options.players,
-                        value: _gm,
-                        onChanged: (id) => setState(() => _gm = id),
+                      // MJ, puis joueurs : de 0 à plusieurs, à cocher (un
+                      // MJ n'est pas proposé parmi les joueurs).
+                      ..._chips(
+                        title: 'MJ',
+                        players: options.players,
+                        selected: _gms,
+                        accent: accent.color,
+                        muted: muted,
                       ),
-                      // Joueurs : plusieurs, à cocher (le MJ exclu).
-                      Text(
-                        'Joueurs',
-                        style: TextStyle(fontSize: 12, color: muted),
-                      ),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final (id, name) in options.players)
-                            if (id != _gm)
-                              FilterChip(
-                                label: Text(name),
-                                selected: _guests.contains(id),
-                                selectedColor: accent.color,
-                                checkmarkColor: Colors.white,
-                                onSelected: _busy
-                                    ? null
-                                    : (on) => setState(
-                                        () => on
-                                            ? _guests.add(id)
-                                            : _guests.remove(id),
-                                      ),
-                              ),
+                      ..._chips(
+                        title: 'Joueurs',
+                        players: [
+                          for (final p in options.players)
+                            if (!_gms.contains(p.$1)) p,
                         ],
+                        selected: _guests,
+                        accent: accent.color,
+                        muted: muted,
                       ),
                       _picker(
                         label: 'Lieu (facultatif)',

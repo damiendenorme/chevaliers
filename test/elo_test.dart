@@ -173,4 +173,28 @@ void main() {
       '05.03.2026 (Trench Crusade 2)',
     );
   });
+
+  test('rpgGlory: 1 per party, +2 first of an event, +5 first of a game', () {
+    GlorySession party(int id, int day, int game, int? event, Set<int> who) => (
+      id: id,
+      date: DateTime(2026, 11, day),
+      game: game,
+      event: event,
+      people: who,
+    );
+    final glory = rpgGlory([
+      // Ordre de saisie mélangé : le calcul suit les dates.
+      party(3, 20, 1, 7, {1, 3}), // 2e partie du jeu 1, 2e de l'événement 7
+      party(1, 10, 1, 7, {
+        1,
+        2,
+      }), // 1re du jeu 1 (+5), 1re de l'événement 7 (+2)
+      party(2, 15, 2, null, {2}), // 1re du jeu 2 (+5), sans événement
+      party(4, 15, 2, null, {3}), // même jour, id plus grand : pas la 1re
+    ]);
+    expect(glory[1], 8 + 1); // 1+5+2, puis 1
+    expect(glory[2], 8 + 6); // 1+5+2, puis 1+5
+    expect(glory[3], 1 + 1); // 1, puis 1
+    expect(glory[4], isNull); // aucune partie
+  });
 }

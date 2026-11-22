@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../data/rows.dart';
+import '../data/rpg_rows.dart';
 import 'name_dialog.dart';
 import 'top_bar.dart';
 
@@ -19,7 +20,17 @@ class RowList extends StatelessWidget {
     required this.rows,
     this.onAdd,
     this.onEditSummary,
+    this.onAddPhoto,
+    this.guestEditor,
   });
+
+  /// Si non nul : les joueurs d'une partie de JDR se retirent et s'ajoutent
+  /// (backoffice).
+  final GuestEditor? guestEditor;
+
+  /// Si non nul : ajout d'une photo à une partie (backoffice), avec l'id de
+  /// la partie ; renvoie l'URL de la photo, ou null si rien n'a été choisi.
+  final Future<String?> Function(int partyId)? onAddPhoto;
 
   /// Si non nul : le résumé d'une partie est modifiable (backoffice), avec
   /// l'id de la partie et le nouveau texte (null : effacé).
@@ -80,7 +91,12 @@ class RowList extends StatelessWidget {
         if (table.rows.isEmpty) {
           return const _Cards(master: _Message('Aucune ligne.'));
         }
-        return _MasterDetail(table, onEditSummary: onEditSummary);
+        return _MasterDetail(
+          table,
+          onEditSummary: onEditSummary,
+          onAddPhoto: onAddPhoto,
+          guestEditor: guestEditor,
+        );
       },
     );
   }
@@ -180,10 +196,19 @@ const double _idColumnWidth = 34;
 const _cellPadding = EdgeInsets.symmetric(horizontal: 12, vertical: 4.5);
 
 class _MasterDetail extends StatefulWidget {
-  const _MasterDetail(this.table, {this.onEditSummary});
+  const _MasterDetail(
+    this.table, {
+    this.onEditSummary,
+    this.onAddPhoto,
+    this.guestEditor,
+  });
 
   final RowTable table;
+
+  /// Connecté : modification des joueurs des parties de JDR.
+  final GuestEditor? guestEditor;
   final Future<void> Function(int partyId, String? text)? onEditSummary;
+  final Future<String?> Function(int partyId)? onAddPhoto;
 
   @override
   State<_MasterDetail> createState() => _MasterDetailState();
@@ -199,6 +224,79 @@ class _MasterDetailState extends State<_MasterDetail> {
   /// Résumés modifiés depuis le chargement, par id de partie : affichés sans
   /// recharger la liste (la sélection reste).
   final _editedSummaries = <int, String?>{};
+
+  /// Photos ajoutées depuis le chargement, par id de partie : affichées sans
+  /// recharger la liste.
+  final _addedPhotos = <int, List<String>>{};
+
+  /// MJ et joueurs des parties de JDR modifiés depuis le chargement, par id
+  /// de partie : affichés sans recharger la liste.
+  final _editedGuests = <int, (List<(int, String)>, List<(int, String)>)>{};
+
+  /// Détail d'une partie de JDR, avec la modification de ses joueurs si
+  /// connecté.
+  Widget _sessionDetail(SessionDetail s) {
+    final id = widget.table.partyId(_selected!);
+    final editor = widget.guestEditor;
+    final edited = id == null ? null : _editedGuests[id];
+    final (gms, guests) = edited ?? (s.gms, s.guests);
+    final infos = [formatFullDate(s.date), ?s.scenario, ?s.event, ?s.place];
+    if (editor == null || id == null) {
+      return _SessionDetail(infos: infos, gms: gms, guests: guests);
+    }
+    List<(int, String)> sorted(List<(int, String)> list) =>
+        list..sort((a, b) => compareNames(a.$2, b.$2));
+
+    Future<void> add({required bool gm}) async {
+      final chosen = await showDialog<(int, String)>(
+        context: context,
+        builder: (_) => AccentScope(
+          style: AccentStyle.of(context),
+          child: _PlayerPicker(
+            title: gm ? 'Ajouter un MJ' : 'Ajouter un joueur',
+            players: editor.players(),
+            exclude: {
+              for (final p in [...gms, ...guests]) p.$1,
+            },
+          ),
+        ),
+      );
+      if (chosen == null) return;
+      await editor.add(id, chosen.$1, gm: gm);
+      if (mounted) {
+        setState(
+          () => _editedGuests[id] = gm
+              ? (sorted([...gms, chosen]), guests)
+              : (gms, sorted([...guests, chosen])),
+        );
+      }
+    }
+
+    return _SessionDetail(
+      infos: infos,
+      gms: gms,
+      guests: guests,
+      onRemove: (playerId) async {
+        await editor.remove(id, playerId);
+        if (mounted) {
+          setState(
+            () => _editedGuests[id] = (
+              [
+                for (final p in gms)
+                  if (p.$1 != playerId) p,
+              ],
+              [
+                for (final p in guests)
+                  if (p.$1 != playerId) p,
+              ],
+            ),
+          );
+        }
+      },
+      onAddGm: () => add(gm: true),
+      onAdd: () => add(gm: false),
+    );
+  }
 
   /// Valeur de tri de chaque ligne, à côté du nom : le score (joueurs), le
   /// nombre de joueurs (jeux) ou la date (événements).
@@ -424,11 +522,20 @@ class _MasterDetailState extends State<_MasterDetail> {
                         // Sa liste de joueurs occupe toute la largeur.
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: _SessionDetail(s),
+                          child: _sessionDetail(s),
                         )
                       else
                         _Detail(table.entries(_selected!)),
-                      _PlayerBanners(table.playerBannersOf(_selected!)),
+                      // Un événement JDR : ceux qui y ont joué, triables.
+                      if (table.eventDetail(_selected!) case final e?)
+                        Padding(
+                          // Puis, un peu plus bas, la liste de ses parties.
+                          padding: const EdgeInsets.only(top: 16, bottom: 24),
+                          child: _EventPlayers(
+                            key: ValueKey(('joueurs', _selected)),
+                            e.players,
+                          ),
+                        ),
                       _SessionLines(table.sessionLinesOf(_selected!)),
                       // Une clé par ligne : le tri repart de zéro à chaque
                       // changement de ligne.
@@ -472,7 +579,21 @@ class _MasterDetailState extends State<_MasterDetail> {
                 if (table.photosOf(_selected!) case final urls?)
                   SliverFillRemaining(
                     hasScrollBody: false,
-                    child: _PhotoZone(urls),
+                    child: _PhotoZone(
+                      [...urls, ...?_addedPhotos[table.partyId(_selected!)]],
+                      onAdd: switch ((
+                        widget.onAddPhoto,
+                        table.partyId(_selected!),
+                      )) {
+                        (final add?, final id?) => () async {
+                          final url = await add(id);
+                          if (url != null && mounted) {
+                            setState(() => (_addedPhotos[id] ??= []).add(url));
+                          }
+                        },
+                        _ => null,
+                      },
+                    ),
                   ),
               ],
             ),
@@ -766,13 +887,236 @@ class _SortHeader extends StatelessWidget {
   }
 }
 
+/// Joueurs d'un événement, au style des listes : la bannière de son id et
+/// son nom, à droite son nombre de parties jouées (dans une pastille, comme
+/// les jeux du Wargame). Triable par nom ou par nombre de parties.
+class _EventPlayers extends StatefulWidget {
+  const _EventPlayers(this.players, {super.key});
+
+  final List<({int id, String name, int parties})> players;
+
+  @override
+  State<_EventPlayers> createState() => _EventPlayersState();
+}
+
+class _EventPlayersState extends State<_EventPlayers> {
+  _SortBy _sortBy = _SortBy.name;
+  bool _ascending = true;
+
+  /// Comme les autres en-têtes : la colonne déjà triée inverse le sens ;
+  /// sinon, par nom de A à Z ou par nombre de parties décroissant.
+  void _sort(_SortBy by) => setState(() {
+    _ascending = by == _sortBy ? !_ascending : by == _SortBy.name;
+    _sortBy = by;
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.players.isEmpty) return const SizedBox.shrink();
+    const divider = BorderSide(color: dividerColor);
+    final direction = _ascending ? 1 : -1;
+    final players = [...widget.players]
+      ..sort((a, b) {
+        if (_sortBy == _SortBy.score) {
+          final byCount = a.parties.compareTo(b.parties);
+          if (byCount != 0) return direction * byCount;
+          return compareNames(a.name, b.name);
+        }
+        return direction * compareNames(a.name, b.name);
+      });
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DecoratedBox(
+          decoration: const BoxDecoration(border: Border(bottom: divider)),
+          child: Row(
+            children: [
+              Expanded(
+                child: _SortHeader(
+                  'Nom',
+                  arrow: _sortBy == _SortBy.name ? _ascending : null,
+                  onTap: () => _sort(_SortBy.name),
+                ),
+              ),
+              _SortHeader(
+                'Parties',
+                arrow: _sortBy == _SortBy.score ? _ascending : null,
+                onTap: () => _sort(_SortBy.score),
+                arrowPlacement: _ArrowPlacement.before,
+              ),
+            ],
+          ),
+        ),
+        for (final p in players)
+          DecoratedBox(
+            decoration: const BoxDecoration(border: Border(bottom: divider)),
+            child: Padding(
+              padding: _cellPadding,
+              child: Row(
+                spacing: 10,
+                children: [
+                  _IdBanner(p.id),
+                  Expanded(
+                    child: Text(
+                      p.name,
+                      style: _text,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  _Badge(p.parties, style: _text),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Fenêtre au design des cartes pour choisir un joueur parmi [players], sauf
+/// ceux d'[exclude] (déjà dans la partie). Renvoie le joueur choisi.
+class _PlayerPicker extends StatelessWidget {
+  const _PlayerPicker({
+    required this.title,
+    required this.players,
+    required this.exclude,
+  });
+
+  final String title;
+  final Future<List<(int, String)>> players;
+  final Set<int> exclude;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    const divider = BorderSide(color: dividerColor);
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: SizedBox(
+        width: 320,
+        child: CardSurface(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: FutureBuilder<List<(int, String)>>(
+              future: players,
+              builder: (context, snapshot) {
+                final all = snapshot.data;
+                if (all == null) {
+                  return Center(
+                    child: snapshot.hasError
+                        ? const Text('Impossible de charger les joueurs.')
+                        : const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                  );
+                }
+                final available = [
+                  for (final p in all)
+                    if (!exclude.contains(p.$1)) p,
+                ];
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        title,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 18),
+                      ),
+                    ),
+                    if (available.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          'Tous les joueurs sont déjà dans la partie.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: muted),
+                        ),
+                      )
+                    else
+                      Flexible(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final p in available)
+                                Material(
+                                  color: Colors.transparent,
+                                  shape: const Border(bottom: divider),
+                                  child: InkWell(
+                                    onTap: () => Navigator.of(context).pop(p),
+                                    hoverColor: AccentStyle.of(context).hover,
+                                    child: Padding(
+                                      padding: _cellPadding,
+                                      child: Row(
+                                        spacing: 10,
+                                        children: [
+                                          _IdBanner(p.$1),
+                                          Expanded(
+                                            child: Text(p.$2, style: _text),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12, right: 12),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: TextButton.styleFrom(foregroundColor: muted),
+                          child: const Text('Annuler'),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Une partie de JDR : la date, le scénario, l'événement puis le lieu, l'un
 /// sous l'autre, centrés et plus petits ; puis la liste de ses joueurs, le
 /// MJ en premier, chacun avec la bannière de son id, au style des listes.
+/// Connecté : chacun se retire, et deux boutons ajoutent un MJ ou un joueur.
 class _SessionDetail extends StatelessWidget {
-  const _SessionDetail(this.s);
+  const _SessionDetail({
+    required this.infos,
+    required this.gms,
+    required this.guests,
+    this.onRemove,
+    this.onAdd,
+    this.onAddGm,
+  });
 
-  final SessionDetail s;
+  /// Lignes d'informations, centrées en haut (date, scénario…).
+  final List<String> infos;
+
+  /// MJ et joueurs (id, nom), affichés dans cet ordre.
+  final List<(int, String)> gms;
+  final List<(int, String)> guests;
+
+  /// Connecté : retirer un MJ ou un joueur (bouton à droite de sa ligne), et
+  /// en ajouter (boutons sous la liste).
+  final Future<void> Function(int playerId)? onRemove;
+  final VoidCallback? onAdd;
+  final VoidCallback? onAddGm;
 
   @override
   Widget build(BuildContext context) {
@@ -798,6 +1142,21 @@ class _SessionDetail extends StatelessWidget {
               gm ? 'MJ' : 'Joueur',
               style: _text.copyWith(fontSize: 12, color: labelColor),
             ),
+            // Connecté : retirer ce MJ ou ce joueur.
+            if (onRemove case final remove?)
+              IconButton(
+                tooltip: 'Retirer de la partie',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 24,
+                  height: 24,
+                ),
+                iconSize: 16,
+                color: labelColor,
+                onPressed: () => remove(p.$1),
+                icon: const Icon(Icons.close),
+              ),
           ],
         ),
       ),
@@ -808,12 +1167,7 @@ class _SessionDetail extends StatelessWidget {
       children: [
         // Un peu plus bas sous la bannière, comme une partie de Wargame.
         const SizedBox(height: 20),
-        for (final info in [
-          formatFullDate(s.date),
-          ?s.scenario,
-          ?s.event,
-          ?s.place,
-        ])
+        for (final info in infos)
           Text(
             info,
             style: _text.copyWith(fontSize: 12, color: labelColor),
@@ -822,14 +1176,37 @@ class _SessionDetail extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         const SizedBox(height: 28),
-        // Les joueurs : le MJ, puis les joueurs.
+        // Les MJ, puis les joueurs.
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (s.gm case final gm?) player(gm, gm: true),
-            for (final g in s.guests) player(g),
+            for (final g in gms) player(g, gm: true),
+            for (final g in guests) player(g),
           ],
         ),
+        // Connecté : ajouter un MJ, ou un joueur.
+        if (onAdd != null || onAddGm != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              spacing: 12,
+              children: [
+                if (onAddGm case final addGm?)
+                  AddButton(
+                    icon: Icons.auto_stories,
+                    label: 'Ajouter un MJ',
+                    onPressed: addGm,
+                  ),
+                if (onAdd case final add?)
+                  AddButton(
+                    icon: Icons.person_add,
+                    label: 'Ajouter un joueur',
+                    onPressed: add,
+                  ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -868,7 +1245,12 @@ class _SessionLines extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (line.gm case final gm?) banner(gm),
+                  if (line.gms.isNotEmpty)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: 4,
+                      children: [for (final g in line.gms) banner(g)],
+                    ),
                   if (line.guests.isNotEmpty)
                     Row(
                       mainAxisSize: MainAxisSize.min,
@@ -884,60 +1266,15 @@ class _SessionLines extends StatelessWidget {
   }
 }
 
-/// Joueurs, chacun représenté par la bannière de son id, à la suite sous un
-/// petit titre. Rien si la liste est vide.
-class _PlayerBanners extends StatelessWidget {
-  const _PlayerBanners(this.players);
-
-  final List<(int, String)> players;
-
-  @override
-  Widget build(BuildContext context) {
-    if (players.isEmpty) return const SizedBox.shrink();
-    final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: 8,
-        children: [
-          Text(
-            'Joueurs',
-            style: _text.copyWith(fontSize: 12, color: labelColor),
-          ),
-          // Seulement les bannières (le nom reste lisible au survol).
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final (id, name) in players)
-                Tooltip(
-                  message: name,
-                  child: _IdBanner(id, scale: _IdBanner.detailScale),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Petite bannière héraldique, au fond texturé des boutons activés, avec un
 /// id en blanc : un rectangle dont le bas est échancré en queue d'aronde.
 class _IdBanner extends StatelessWidget {
-  const _IdBanner(this.id, {this.flat = false, this.scale = 1});
+  const _IdBanner(this.id, {this.flat = false});
 
   final int id;
 
   /// Texture atténuée (voir [AccentStyle.flatTexture]).
   final bool flat;
-
-  /// Agrandissement (1 : la taille des listes).
-  final double scale;
-
-  /// Agrandissement des bannières dans les détails.
-  static const double detailScale = 1.8;
 
   static const double width = 24;
   static const double height = 21;
@@ -949,14 +1286,13 @@ class _IdBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = AccentStyle.of(context);
     // Bordure de la couleur des éléments choisis, qui suit la forme.
-    final notch = _IdBanner.notch * scale;
     return CustomPaint(
       foregroundPainter: _BannerBorderPainter(notch, accent.border),
       child: ClipPath(
         clipper: _BannerClipper(notch),
         child: Container(
-          width: width * scale,
-          height: height * scale,
+          width: width,
+          height: height,
           padding: EdgeInsets.only(bottom: notch - 1),
           alignment: Alignment.center,
           // Le fond texturé des boutons activés (couleur de la page), ou sa
@@ -965,7 +1301,7 @@ class _IdBanner extends StatelessWidget {
           child: Text(
             '$id',
             style: TextStyle(
-              fontSize: 10 * scale,
+              fontSize: 10,
               height: 1,
               fontWeight: FontWeight.bold,
               color: Colors.white,
@@ -1298,6 +1634,8 @@ class _Summary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Déconnecté et sans résumé : rien.
+    if (text == null && onEdit == null) return const SizedBox.shrink();
     final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 24, 12, 0),
@@ -1340,39 +1678,101 @@ class _Summary extends StatelessWidget {
 }
 
 /// Zone de photos : une grille de vignettes carrées ; un clic ouvre la photo
-/// en grand. Sans photo, un message centré dans la zone.
-class _PhotoZone extends StatelessWidget {
-  const _PhotoZone(this.urls);
+/// en grand. Sans photo, un message centré dans la zone. Connecté, un bouton
+/// « + » dessous pour en ajouter une.
+class _PhotoZone extends StatefulWidget {
+  const _PhotoZone(this.urls, {this.onAdd});
 
   static const double thumbnail = 120;
 
   final List<String> urls;
 
+  /// Si non nul (connecté) : un bouton « + » pour ajouter une photo.
+  final Future<void> Function()? onAdd;
+
+  @override
+  State<_PhotoZone> createState() => _PhotoZoneState();
+}
+
+class _PhotoZoneState extends State<_PhotoZone> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _add(Future<void> Function() add) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await add();
+    } catch (_) {
+      if (mounted) setState(() => _error = "L'envoi de la photo a échoué.");
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Le bouton « + » (ou l'envoi en cours), et l'erreur s'il y en a une.
+  List<Widget> _addButton() => [
+    if (widget.onAdd case final add?)
+      _busy
+          ? const SizedBox.square(
+              dimension: AddButton.size,
+              child: Center(
+                child: SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          : AddButton(label: 'Ajouter une photo', onPressed: () => _add(add)),
+    if (_error case final error?)
+      Text(
+        error,
+        style: const TextStyle(fontSize: 12, color: Color(0xFFE5534B)),
+      ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    final urls = widget.urls;
+    // Déconnecté et sans photo : rien.
+    if (urls.isEmpty && widget.onAdd == null) return const SizedBox.shrink();
     if (urls.isEmpty) {
+      // « Aucune photo. », et dessous le bouton « + ».
       return Center(
-        child: Text('Aucune photo.', style: _text.copyWith(color: labelColor)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          spacing: 12,
+          children: [
+            Text('Aucune photo.', style: _text.copyWith(color: labelColor)),
+            ..._addButton(),
+          ],
+        ),
       );
     }
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 32, 12, 12),
+      // Vignettes centrées horizontalement, le bouton « + » dessous.
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        spacing: 12,
         children: [
           Wrap(
+            alignment: WrapAlignment.center,
             spacing: 8,
             runSpacing: 8,
             children: [
               for (final url in urls)
                 _Thumbnail(
                   url,
-                  size: thumbnail,
+                  size: _PhotoZone.thumbnail,
                   onTap: () => _open(context, url),
                 ),
             ],
           ),
+          ..._addButton(),
         ],
       ),
     );

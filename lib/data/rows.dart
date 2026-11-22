@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'elo.dart';
@@ -22,7 +23,7 @@ class RowTable {
     this.matchListShowsGame = true,
     this.dates,
     this.fullDates = false,
-    this.playerBanners,
+    this.eventDetails,
     this.sessionDetails,
     this.sessionLines,
     this.partyIds,
@@ -102,12 +103,11 @@ class RowTable {
 
   DateTime? date(int index) => dates?[index];
 
-  /// Joueurs (id, nom) affichés dans le détail de chaque ligne, avec la
-  /// bannière de leur id (événements JDR : ceux qui y ont joué).
-  final List<List<(int, String)>>? playerBanners;
+  /// Pour les événements JDR : détaillés comme une partie, avec leur date et
+  /// ceux qui y ont joué.
+  final List<EventDetail>? eventDetails;
 
-  List<(int, String)> playerBannersOf(int index) =>
-      playerBanners?[index] ?? const [];
+  EventDetail? eventDetail(int index) => eventDetails?[index];
 
   /// Pour les parties de JDR : chaque ligne est une partie, affichée dans le
   /// détail à la manière d'une partie de Wargame, à la place de ses colonnes.
@@ -241,21 +241,25 @@ List<MatchDetail> _matchDetails({
 }
 
 /// Une partie de JDR détaillée : sa date, son scénario, son événement et son
-/// lieu (facultatifs), son MJ et ses joueurs (id, nom).
+/// lieu (facultatifs), ses MJ et ses joueurs (id, nom).
 typedef SessionDetail = ({
   DateTime date,
   String? scenario,
   String? place,
   String? event,
-  (int, String)? gm,
+  List<(int, String)> gms,
   List<(int, String)> guests,
 });
 
-/// Une partie de JDR sur une ligne : son libellé (la date), puis son MJ et
-/// ses joueurs (id, nom).
+/// Un événement JDR détaillé : ceux qui ont joué à ses parties (comme MJ ou
+/// joueur), avec leur nombre de parties jouées à l'événement.
+typedef EventDetail = ({List<({int id, String name, int parties})> players});
+
+/// Une partie de JDR sur une ligne : son libellé, puis ses MJ et ses joueurs
+/// (id, nom).
 typedef SessionLine = ({
   String label,
-  (int, String)? gm,
+  List<(int, String)> gms,
   List<(int, String)> guests,
 });
 
@@ -324,7 +328,7 @@ _fetchGames(SupabaseClient db, String prefix) async {
 /// Pour `partie` : les deux joueurs, leurs scores et le jeu.
 /// Pour `joueur` : le nom, son ELO à chaque jeu auquel il a joué et ses
 /// parties.
-/// Pour `evenement` : le nom et la date.
+/// Pour `evenement` : le nom (et la date, dans la liste seulement).
 /// Pour `jeu` : le nom, le classement ELO des joueurs qui y ont joué et ses
 /// parties.
 /// Pour les autres tables : le nom.
@@ -545,14 +549,11 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
       banners: [
         for (final r in rows) bannerAsset('$prefix$table', r['id'] as int),
       ],
+      // La date seulement dans la liste, pas dans le détail.
       dates: dates,
-      columns: const ['Nom', 'Date'],
+      columns: const ['Nom'],
       rows: [
-        for (final (i, r) in rows.indexed)
-          [
-            r['nom'] as String,
-            if (dates[i] case final d?) formatMonth(d) else '—',
-          ],
+        for (final r in rows) [r['nom'] as String],
       ],
     );
   }
@@ -766,3 +767,30 @@ Future<void> saveSummary(int partyId, String? text, {String prefix = ''}) =>
         .from('${prefix}partie')
         .update({'resume': (text == null || text.trim().isEmpty) ? null : text})
         .eq('id', partyId);
+
+/// Fait choisir une image, la dépose dans le bucket « photos » et la
+/// rattache à la partie [partyId] (backoffice : réservé aux connectés).
+/// Renvoie son URL publique, ou null si aucune image n'a été choisie.
+/// [prefix] : voir [fetchRows].
+Future<String?> pickAndUploadPhoto(int partyId, {String prefix = ''}) async {
+  final file = await FilePicker.pickFile(type: FileType.image);
+  if (file == null) return null;
+  final bytes = await file.xFile.readAsBytes();
+  final ext = (file.extension ?? 'jpg').toLowerCase();
+  final path =
+      '${prefix}partie-$partyId/${DateTime.now().millisecondsSinceEpoch}.$ext';
+  final db = Supabase.instance.client;
+  final bucket = db.storage.from('photos');
+  await bucket.uploadBinary(
+    path,
+    bytes,
+    fileOptions: FileOptions(
+      contentType: 'image/${ext == 'jpg' ? 'jpeg' : ext}',
+    ),
+  );
+  await db.from('${prefix}photo').insert({
+    'partie_id': partyId,
+    'chemin': path,
+  });
+  return bucket.getPublicUrl(path);
+}
