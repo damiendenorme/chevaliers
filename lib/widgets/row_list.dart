@@ -823,7 +823,7 @@ class _MatchupList extends StatefulWidget {
 
   /// Largeur des colonnes de la date et du jeu, à gauche, et de celle du
   /// lieu, à droite.
-  static const double dateWidth = 60;
+  static const double dateWidth = 72;
   static const double gameWidth = 120;
   static const double placeWidth = 80;
 
