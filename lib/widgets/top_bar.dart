@@ -11,9 +11,9 @@ const edgeColor = Color(0xFF5A4630);
 /// sombre des cartes.
 const dividerColor = Color(0xFF3A3532);
 
-/// Bordure de l'élément choisi d'une liste ou d'un menu : le gris des
-/// séparateurs, un peu plus clair.
-const selectedBorderColor = Color(0xFF6E6762);
+/// Bordure de l'élément choisi d'une liste ou d'un menu : un gris clair
+/// teinté d'or, qui rappelle le bronze du bourrelet des cartes.
+const selectedBorderColor = Color(0xFF9C8458);
 
 /// Couleur des éléments actifs : marron sombre, comme le bois de l'image de
 /// Couleur des éléments actifs : bronze doré, avec le texte en blanc.
