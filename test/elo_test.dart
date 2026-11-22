@@ -192,27 +192,56 @@ void main() {
       party(2, 15, 2, null, {2}), // 1re du jeu 2 (+5), sans événement
       party(4, 15, 2, null, {3}), // même jour, id plus grand : pas la 1re
     ]);
-    expect(glory[1], 8 + 1); // 1+5+2, puis 1
+    expect(
+      glory[1],
+      8 + 2,
+    ); // 1+5+2, puis 2 (2e partie de suite de l'événement)
     expect(glory[2], 8 + 6); // 1+5+2, puis 1+5
     expect(glory[3], 1 + 1); // 1, puis 1
     expect(glory[4], isNull); // aucune partie
   });
 
-  test('rpgSessionPoints: the Glory each party brings', () {
-    GlorySession party(int id, int day, int game, int? event) => (
+  test('rpgParticipationPoints: a run of consecutive event parties pays', () {
+    GlorySession party(int id, int day, Set<int> who, {int? event = 7}) => (
       id: id,
-      date: DateTime(2026, 11, day),
-      game: game,
+      date: DateTime(2026, 1, day),
+      game: 1,
       event: event,
-      people: const {1},
+      people: who,
     );
+    final points = rpgParticipationPoints([
+      party(1, 1, {1, 2}), // 1re du jeu (+5) et de l'événement (+2)
+      party(2, 2, {1}), // 2 manque
+      party(3, 3, {1, 2}),
+      party(4, 4, {1, 2}),
+      party(5, 5, {1}, event: null), // hors événement : ne compte pas
+    ]);
+    // 1 : série de 1, 2, 3, 4 ; hors événement, 1.
     expect(
-      rpgSessionPoints([
-        party(2, 20, 1, 7), // ni 1re du jeu, ni de l'événement
-        party(1, 10, 1, 7), // 1re du jeu (+5) et de l'événement (+2)
-        party(3, 25, 2, 7), // 1re du jeu 2 (+5)
-      ]),
-      {1: 8, 2: 1, 3: 6},
+      [
+        for (final id in [1, 2, 3, 4, 5]) points[(id, 1)],
+      ],
+      [1 + 7, 2, 3, 4, 1],
+    );
+    // 2 : 1 (+7), manque la partie 2, puis repart à 1, 2.
+    expect([points[(1, 2)], points[(3, 2)], points[(4, 2)]], [8, 1, 2]);
+    expect(points[(2, 2)], isNull);
+  });
+
+  test('rpgParticipationPoints: a run pays at most 10', () {
+    final points = rpgParticipationPoints([
+      for (var i = 1; i <= 12; i++)
+        (
+          id: i,
+          date: DateTime(2026, 1, i),
+          game: 1,
+          event: 7,
+          people: const {1},
+        ),
+    ]);
+    expect(
+      [for (var i = 2; i <= 12; i++) points[(i, 1)]],
+      [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10],
     );
   });
 }

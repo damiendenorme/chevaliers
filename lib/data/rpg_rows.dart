@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'elo.dart';
@@ -79,8 +81,11 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
         people: {...s.gms, ...s.guests},
       ),
   ];
-  final glory = rpgGlory(glorySessions);
-  final sessionPoints = rpgSessionPoints(glorySessions);
+  final participation = rpgParticipationPoints(glorySessions);
+  final glory = <int, int>{};
+  for (final MapEntry(key: (_, player), :value) in participation.entries) {
+    glory[player] = (glory[player] ?? 0) + value;
+  }
 
   // Numéro d'ordre de chaque partie dans son événement (1, 2…), par date.
   final eventOrder = <int, int>{};
@@ -242,7 +247,7 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
               final glory = <int, int>{};
               for (final s in played) {
                 for (final p in {...s.gms, ...s.guests}) {
-                  glory[p] = (glory[p] ?? 0) + sessionPoints[s.id]!;
+                  glory[p] = (glory[p] ?? 0) + participation[(s.id, p)]!;
                 }
               }
               return (
@@ -304,27 +309,33 @@ typedef GlorySession = ({
   Set<int> people,
 });
 
-/// Gloire de chaque joueur (id → points) :
-/// - 1 point par partie jouée ou menée (MJ) ;
-/// - +2 points pour avoir été à la première partie d'un événement ;
-/// - +5 points pour avoir été à la première partie d'un jeu.
-///
-/// « Première » : par date, puis par id à date égale.
+/// Gloire de chaque joueur (id → points) : la somme de ses points à chaque
+/// partie (voir [rpgParticipationPoints]).
 Map<int, int> rpgGlory(Iterable<GlorySession> sessions) {
-  final points = rpgSessionPoints(sessions);
   final glory = <int, int>{};
-  for (final s in sessions) {
-    for (final p in s.people) {
-      glory[p] = (glory[p] ?? 0) + points[s.id]!;
-    }
+  for (final MapEntry(key: (_, player), :value) in rpgParticipationPoints(
+    sessions,
+  ).entries) {
+    glory[player] = (glory[player] ?? 0) + value;
   }
   return glory;
 }
 
-/// Gloire rapportée par chaque partie (id → points) à chacun de ceux qui y
-/// étaient : 1, +2 si c'est la première de son événement, +5 si c'est la
-/// première de son jeu (voir [rpgGlory]).
-Map<int, int> rpgSessionPoints(Iterable<GlorySession> sessions) {
+/// Plafond du gain d'une série de parties consécutives d'un événement.
+const rpgStreakCap = 10;
+
+/// Points de Gloire gagnés par chacun à chaque partie, par (id de partie,
+/// id de joueur) :
+/// - 1 point par partie jouée ou menée (MJ) ; dans un événement, une série
+///   paie : le gain est le nombre de parties consécutives de l'événement
+///   auxquelles il a été (1, 2, 3…, au plus [rpgStreakCap]) ; une partie
+///   de l'événement manquée, et le compteur repart à 1 ;
+/// - +2 points pour avoir été à la première partie d'un événement ;
+/// - +5 points pour avoir été à la première partie d'un jeu.
+///
+/// Ordre des parties (« première », « consécutives ») : par date, puis par
+/// id à date égale.
+Map<(int, int), int> rpgParticipationPoints(Iterable<GlorySession> sessions) {
   final ordered = [...sessions]
     ..sort((a, b) {
       final byDate = a.date.compareTo(b.date);
@@ -332,13 +343,28 @@ Map<int, int> rpgSessionPoints(Iterable<GlorySession> sessions) {
     });
   final seenGames = <int>{};
   final seenEvents = <int>{};
-  return {
-    for (final s in ordered)
-      s.id:
-          1 +
-          (seenGames.add(s.game) ? 5 : 0) +
-          (s.event != null && seenEvents.add(s.event!) ? 2 : 0),
-  };
+  // Par événement : ceux de sa partie précédente, et la série de chacun.
+  final previous = <int, Set<int>>{};
+  final streaks = <(int, int), int>{};
+  final points = <(int, int), int>{};
+  for (final s in ordered) {
+    final bonus =
+        (seenGames.add(s.game) ? 5 : 0) +
+        (s.event != null && seenEvents.add(s.event!) ? 2 : 0);
+    for (final p in s.people) {
+      var base = 1;
+      if (s.event case final e?) {
+        final streak = (previous[e]?.contains(p) ?? false)
+            ? (streaks[(e, p)] ?? 0) + 1
+            : 1;
+        streaks[(e, p)] = streak;
+        base = min(streak, rpgStreakCap);
+      }
+      points[(s.id, p)] = base + bonus;
+    }
+    if (s.event case final e?) previous[e] = s.people;
+  }
+  return points;
 }
 
 /// « 28.11.2026 La Tombe de M. Eustache (Paris Éternité 1) » : la date, le
