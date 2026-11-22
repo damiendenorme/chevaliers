@@ -97,6 +97,9 @@ const _insetShadow = LinearGradient(
 
 /// Largeur des colonnes de scores ELO (4 chiffres), alignés à droite.
 const double _scoreWidth = 44;
+
+/// Largeur de la colonne des ids (bannières), tout à droite de la liste.
+const double _idColumnWidth = 34;
 const _cellPadding = EdgeInsets.symmetric(horizontal: 12, vertical: 4);
 
 class _MasterDetail extends StatefulWidget {
@@ -109,7 +112,7 @@ class _MasterDetail extends StatefulWidget {
 }
 
 /// Colonne de tri de la liste.
-enum _SortBy { name, score }
+enum _SortBy { name, score, id }
 
 class _MasterDetailState extends State<_MasterDetail> {
   /// Ligne affichée à droite, ou null tant qu'aucune n'est choisie.
@@ -143,10 +146,10 @@ class _MasterDetailState extends State<_MasterDetail> {
   late bool _ascending = _sortBy == _SortBy.name;
 
   /// Cliquer sur la colonne déjà triée inverse le sens ; sur l'autre, trie
-  /// par nom de A à Z, ou par valeur décroissante.
+  /// par nom de A à Z, par id croissant, ou par valeur décroissante.
   void _sort(_SortBy by) {
     setState(() {
-      _ascending = by == _sortBy ? !_ascending : by == _SortBy.name;
+      _ascending = by == _sortBy ? !_ascending : by != _SortBy.score;
       _sortBy = by;
     });
   }
@@ -158,6 +161,10 @@ class _MasterDetailState extends State<_MasterDetail> {
     if (!_sortable) return order;
     final direction = _ascending ? 1 : -1;
     return order..sort((a, b) {
+      if (_sortBy == _SortBy.id) {
+        final byId = (table.id(a) ?? 0).compareTo(table.id(b) ?? 0);
+        if (byId != 0) return direction * byId;
+      }
       if (_sortBy == _SortBy.score) {
         final (sa, sb) = (_value(table, a), _value(table, b));
         if (sa == null || sb == null) {
@@ -216,6 +223,7 @@ class _MasterDetailState extends State<_MasterDetail> {
                       child: _MasterLine(
                         table,
                         i,
+                        selected: i == _selected,
                         style: i == _selected
                             ? _text.copyWith(color: Colors.white)
                             : _text,
@@ -253,12 +261,45 @@ class _MasterDetailState extends State<_MasterDetail> {
                             rowHeight: true,
                           ),
                         ),
+                        // Sa droite collée à celle des valeurs ; flèche avant.
                         _SortHeader(
                           _valueLabel!,
                           arrow: _sortBy == _SortBy.score ? _ascending : null,
                           onTap: () => _sort(_SortBy.score),
                           rowHeight: true,
+                          padding: EdgeInsets.fromLTRB(
+                            12,
+                            4,
+                            table.ids != null ? 0 : 12,
+                            4,
+                          ),
+                          arrowPlacement: _ArrowPlacement.before,
                         ),
+                        // Colonne des ids (joueurs) : son titre au-dessus des
+                        // bannières, tout à droite.
+                        if (table.ids != null)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8, right: 12),
+                            child: SizedBox(
+                              width: _idColumnWidth,
+                              // Centré sur les bannières, même s'il est plus
+                              // large que leur colonne.
+                              child: Center(
+                                child: _SortHeader(
+                                  'ID',
+                                  arrow: _sortBy == _SortBy.id
+                                      ? _ascending
+                                      : null,
+                                  onTap: () => _sort(_SortBy.id),
+                                  rowHeight: true,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
+                                  arrowPlacement: _ArrowPlacement.centered,
+                                ),
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -326,11 +367,19 @@ class _MasterDetailState extends State<_MasterDetail> {
 /// Contenu d'une ligne de la liste : son libellé (avec pastille, ou forme et
 /// score), ou pour une partie, voir [_MatchupLine].
 class _MasterLine extends StatelessWidget {
-  const _MasterLine(this.table, this.index, {required this.style});
+  const _MasterLine(
+    this.table,
+    this.index, {
+    required this.style,
+    this.selected = false,
+  });
 
   final RowTable table;
   final int index;
   final TextStyle style;
+
+  /// Ligne choisie (fond texturé).
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -370,12 +419,24 @@ class _MasterLine extends StatelessWidget {
         spacing: 8,
         children: [
           Expanded(child: text(table.title(index))),
-          _Form(form),
+          // Un peu à l'écart du score.
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: _Form(form),
+          ),
           // Largeur fixe : les scores restent alignés d'une ligne à l'autre.
           SizedBox(
             width: _scoreWidth,
             child: text(score?.toString() ?? '', align: TextAlign.right),
           ),
+          // Tout à droite, la bannière de l'id.
+          if (table.id(index) case final id?)
+            SizedBox(
+              width: _idColumnWidth,
+              // Ligne choisie : bannière plus plate, pour se détacher de son
+              // fond texturé.
+              child: Center(child: _IdBanner(id, flat: selected)),
+            ),
         ],
       );
     }
@@ -501,6 +562,11 @@ class _MatchupLine extends StatelessWidget {
   }
 }
 
+/// Place de la flèche de tri d'un titre de colonne : après lui, avant lui
+/// (sa droite reste alignée sur celle des valeurs), ou dessinée à sa droite
+/// sans prendre de place (il reste centré).
+enum _ArrowPlacement { after, before, centered }
+
 /// Titre de colonne cliquable, pour trier la liste. [arrow] : flèche vers le
 /// haut (true) ou le bas (false) sur la colonne triée, rien sur l'autre.
 class _SortHeader extends StatelessWidget {
@@ -509,11 +575,19 @@ class _SortHeader extends StatelessWidget {
     required this.arrow,
     required this.onTap,
     this.rowHeight = false,
+    this.padding = _cellPadding,
+    this.arrowPlacement = _ArrowPlacement.after,
   });
 
   final String label;
   final bool? arrow;
   final VoidCallback onTap;
+
+  /// Marges autour du titre.
+  final EdgeInsets padding;
+
+  /// Place de la flèche de tri par rapport au titre.
+  final _ArrowPlacement arrowPlacement;
 
   /// Même hauteur de ligne que les éléments de la liste (texte de 14px),
   /// malgré son texte plus petit.
@@ -523,33 +597,142 @@ class _SortHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
     final style = _text.copyWith(fontSize: 12, color: color);
+    final icon = arrow == null
+        ? null
+        : Icon(
+            arrow! ? Icons.arrow_upward : Icons.arrow_downward,
+            size: 12,
+            color: color,
+          );
+    final text = Text(
+      label,
+      style: style,
+      strutStyle: rowHeight
+          ? const StrutStyle(fontSize: 14, forceStrutHeight: true)
+          : null,
+    );
     return InkWell(
       onTap: onTap,
       hoverColor: AccentStyle.of(context).hover,
       child: Padding(
-        padding: _cellPadding,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 2,
-          children: [
-            Text(
-              label,
-              style: style,
-              strutStyle: rowHeight
-                  ? const StrutStyle(fontSize: 14, forceStrutHeight: true)
-                  : null,
-            ),
-            if (arrow != null)
-              Icon(
-                arrow! ? Icons.arrow_upward : Icons.arrow_downward,
-                size: 12,
-                color: color,
+        padding: padding,
+        child: arrowPlacement == _ArrowPlacement.centered
+            // Centré : seul le titre compte pour la place ; la flèche est
+            // dessinée juste à sa droite, sans le décaler.
+            ? Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  text,
+                  if (icon != null) Positioned(right: -14, child: icon),
+                ],
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: 2,
+                children: [
+                  if (arrowPlacement == _ArrowPlacement.before) ?icon,
+                  text,
+                  if (arrowPlacement == _ArrowPlacement.after) ?icon,
+                ],
               ),
-          ],
+      ),
+    );
+  }
+}
+
+/// Petite bannière héraldique, au fond texturé des boutons activés, avec un
+/// id en blanc : un rectangle dont le bas est échancré en queue d'aronde.
+class _IdBanner extends StatelessWidget {
+  const _IdBanner(this.id, {this.flat = false});
+
+  final int id;
+
+  /// Texture atténuée (voir [AccentStyle.flatTexture]).
+  final bool flat;
+
+  static const double width = 24;
+  static const double height = 20;
+
+  /// Profondeur de l'échancrure du bas.
+  static const double notch = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AccentStyle.of(context);
+    // Bordure de la couleur des éléments choisis, qui suit la forme.
+    return CustomPaint(
+      foregroundPainter: _BannerBorderPainter(notch, accent.border),
+      child: ClipPath(
+        clipper: const _BannerClipper(notch),
+        child: Container(
+          width: width,
+          height: height,
+          padding: const EdgeInsets.only(bottom: notch - 1),
+          alignment: Alignment.center,
+          // Le fond texturé des boutons activés (couleur de la page), ou sa
+          // version plus plate.
+          decoration: flat ? accent.flatTexture : accent.texture,
+          child: Text(
+            '$id',
+            style: const TextStyle(
+              fontSize: 10,
+              height: 1,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
         ),
       ),
     );
   }
+}
+
+/// Forme de bannière : rectangle au bas échancré en V.
+Path _bannerPath(Size size, double notch) => Path()
+  ..moveTo(0, 0)
+  ..lineTo(size.width, 0)
+  ..lineTo(size.width, size.height)
+  ..lineTo(size.width / 2, size.height - notch)
+  ..lineTo(0, size.height)
+  ..close();
+
+class _BannerClipper extends CustomClipper<Path> {
+  const _BannerClipper(this.notch);
+
+  final double notch;
+
+  @override
+  Path getClip(Size size) => _bannerPath(size, notch);
+
+  @override
+  bool shouldReclip(_BannerClipper old) => old.notch != notch;
+}
+
+/// Bordure de la bannière, le long de sa forme (à l'intérieur).
+class _BannerBorderPainter extends CustomPainter {
+  const _BannerBorderPainter(this.notch, this.color);
+
+  final double notch;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.clipPath(_bannerPath(size, notch));
+    canvas.drawPath(
+      _bannerPath(size, notch),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = color,
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_BannerBorderPainter old) =>
+      old.notch != notch || old.color != color;
 }
 
 /// Pastilles des dernières parties, de la plus ancienne à la plus récente :

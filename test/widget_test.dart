@@ -947,6 +947,69 @@ void main() {
     expect(inList('Score'), findsNothing);
   });
 
+  testWidgets('Player ids sit in a sortable ID column on the right', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => const RowTable(
+            columns: ['Nom'],
+            rows: [
+              ['Arthur'],
+              ['Bors'],
+              ['Gauvain'],
+            ],
+            forms: [[], [], []],
+            globalScores: [1000, 1100, 900],
+            ids: [3, 1, 2],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    List<String> order() => ['Arthur', 'Bors', 'Gauvain']
+      ..sort(
+        (a, b) => tester
+            .getRect(find.text(a))
+            .top
+            .compareTo(tester.getRect(find.text(b)).top),
+      );
+
+    // La bannière (id 3) tout à droite de la ligne d'Arthur, sous « ID ».
+    final name = tester.getRect(find.text('Arthur'));
+    final id = tester.getRect(inList('3'));
+    final header = tester.getRect(inList('ID'));
+    final listRight =
+        tester.getRect(find.byType(RowList)).left + RowList.listWidth;
+    expect(id.left, greaterThan(name.right));
+    expect(id.center.dy, moreOrLessEquals(name.center.dy, epsilon: 2));
+    expect(id.right, lessThanOrEqualTo(listRight - 12));
+    // « ID » centré sur les bannières ; la droite de « Score » collée à
+    // celle des scores.
+    final banner = tester.getRect(
+      find.ancestor(of: inList('3'), matching: find.byType(ClipPath)).first,
+    );
+    expect(header.center.dx, moreOrLessEquals(banner.center.dx));
+    expect(
+      tester.getRect(inList('Score')).right,
+      moreOrLessEquals(tester.getRect(inList('1000')).right),
+    );
+
+    // Tri par ID : croissant, puis décroissant.
+    await tester.tap(inList('ID'));
+    await tester.pump();
+    expect(order(), ['Bors', 'Gauvain', 'Arthur']);
+    await tester.tap(inList('ID'));
+    await tester.pump();
+    expect(order(), ['Arthur', 'Gauvain', 'Bors']);
+  });
+
   testWidgets('Hovering a button does not animate or resize it', (
     tester,
   ) async {

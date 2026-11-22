@@ -15,6 +15,7 @@ class RowTable {
     this.forms,
     this.globalScores,
     this.globalScoreLabel = 'Score',
+    this.ids,
     this.matchLists,
     this.matchDetails,
     this.photos,
@@ -55,6 +56,12 @@ class RowTable {
   final List<int?>? globalScores;
 
   int? globalScore(int index) => globalScores?[index];
+
+  /// Id de chaque ligne, affiché dans une bannière devant son nom dans la
+  /// liste (pour les joueurs).
+  final List<int>? ids;
+
+  int? id(int index) => ids?[index];
 
   /// Nom du score global dans l'en-tête de la liste : « Score » (Wargame),
   /// « Gloire » (RPG).
@@ -384,6 +391,7 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
         for (final p in players) bannerAsset('$prefix$table', p['id'] as int),
       ],
       forms: [for (final p in players) recentForm(games, p['id'] as int)],
+      ids: [for (final p in players) p['id'] as int],
       // Sans partie : rien au Wargame ; au RPG, la Gloire de départ, 0.
       globalScores: [
         for (final p in players)

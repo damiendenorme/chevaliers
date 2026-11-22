@@ -70,6 +70,17 @@ class AccentStyle {
     ),
   );
 
+  /// [texture] plus plate : la pierre à peine visible sur la couleur unie.
+  BoxDecoration get flatTexture => BoxDecoration(
+    color: color,
+    image: DecorationImage(
+      image: const AssetImage('assets/Carte.jpg'),
+      fit: BoxFit.cover,
+      opacity: 0.3,
+      colorFilter: ColorFilter.mode(color, BlendMode.multiply),
+    ),
+  );
+
   /// Accentuation de la page qui contient [context] (Wargame par défaut).
   static AccentStyle of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AccentScope>()?.style ??
