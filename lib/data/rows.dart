@@ -36,6 +36,7 @@ class RowTable {
     this.banners,
     this.lists,
     this.sortableLists = false,
+    this.rankedLists = false,
     this.listForms,
   });
 
@@ -179,6 +180,10 @@ class RowTable {
   /// Les listes du détail ont un en-tête pour les trier par nom ou par
   /// valeur (pour les joueurs : leurs jeux).
   final bool sortableLists;
+
+  /// Les listes du détail sont des classements (le rang s'affiche devant
+  /// chaque nom quand on les trie par valeur) : le classement d'un jeu.
+  final bool rankedLists;
 
   /// Détail d'une ligne : chacune de ses colonnes, sauf le nom (déjà dans la
   /// liste).
@@ -568,9 +573,19 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
       ],
       // Le classement d'un jeu ne contient que les joueurs qui y ont joué.
       badges: [for (final j in boardGames) elo[j['id'] as int]?.length ?? 0],
+      // Son classement, triable par nom ou par score ; le rang devant le
+      // nom quand il est trié par score.
+      sortableLists: true,
+      rankedLists: true,
       lists: [
         for (final j in boardGames)
-          ranking(elo[j['id'] as int] ?? const {}, playerNames),
+          [
+            for (final id in rankedPlayers(
+              elo[j['id'] as int] ?? const {},
+              playerNames,
+            ))
+              (playerNames[id]!, '${elo[j['id'] as int]![id]!.round()}'),
+          ],
       ],
       // Pastilles de chaque joueur classé : ses 5 dernières parties à ce jeu.
       listForms: [

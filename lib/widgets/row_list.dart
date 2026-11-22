@@ -400,6 +400,28 @@ class _MasterDetailState extends State<_MasterDetail> {
     final table = widget.table;
     const divider = BorderSide(color: dividerColor);
 
+    // Trié par score (ou Gloire) : le rang de chacun au classement, du
+    // meilleur (1) au moins bon, quel que soit le sens du tri ; à score égal,
+    // par nom. Sans score : pas de rang.
+    final Map<int, int>? ranks;
+    if (_sortBy == _SortBy.score && table.globalScores != null) {
+      final ranked =
+          [
+            for (var i = 0; i < table.rows.length; i++)
+              if (table.globalScore(i) != null) i,
+          ]..sort((a, b) {
+            final byScore = table
+                .globalScore(b)!
+                .compareTo(table.globalScore(a)!);
+            return byScore != 0
+                ? byScore
+                : compareNames(table.title(a), table.title(b));
+          });
+      ranks = {for (final (r, i) in ranked.indexed) i: r + 1};
+    } else {
+      ranks = null;
+    }
+
     final list = SingleChildScrollView(
       // Sans en-tête, le premier élément est baissé de l'épaisseur du
       // bourrelet, comme l'en-tête : il paraît aussi haut que les autres.
@@ -442,6 +464,7 @@ class _MasterDetailState extends State<_MasterDetail> {
                         child: _MasterLine(
                           table,
                           i,
+                          rank: ranks?[i],
                           selected: i == _selected,
                           style: i == _selected
                               ? _text.copyWith(color: Colors.white)
@@ -598,6 +621,7 @@ class _MasterDetailState extends State<_MasterDetail> {
                         key: ValueKey(_selected),
                         table.list(_selected!),
                         sortable: table.sortableLists,
+                        ranked: table.rankedLists,
                         forms: table.listForm(_selected!),
                         // Un clic sur un élément (jeu, joueur) y mène.
                         onTap: switch ((
@@ -686,11 +710,15 @@ class _MasterLine extends StatelessWidget {
     this.index, {
     required this.style,
     this.selected = false,
+    this.rank,
   });
 
   final RowTable table;
   final int index;
   final TextStyle style;
+
+  /// Rang au classement, affiché devant le nom (« 1. »), ou rien.
+  final int? rank;
 
   /// Ligne choisie (fond texturé).
   final bool selected;
@@ -738,7 +766,13 @@ class _MasterLine extends StatelessWidget {
       return Row(
         spacing: 8,
         children: [
-          Expanded(child: text(table.title(index))),
+          Expanded(
+            child: text(
+              rank == null
+                  ? table.title(index)
+                  : '$rank. ${table.title(index)}',
+            ),
+          ),
           // Un peu à l'écart du score.
           Padding(
             padding: const EdgeInsets.only(right: 10),
@@ -1574,10 +1608,15 @@ class _LineList extends StatefulWidget {
     this.sortable = false,
     this.forms,
     this.onTap,
+    this.ranked = false,
   });
 
   /// Si non nul : chaque ligne est cliquable (position dans [lines]).
   final ValueChanged<int>? onTap;
+
+  /// Classement : trié par valeur, chaque libellé est précédé de son rang
+  /// (« 1. »), du meilleur au moins bon, comme la liste des joueurs.
+  final bool ranked;
 
   final List<(String, String)> lines;
 
@@ -1623,9 +1662,24 @@ class _LineListState extends State<_LineList> {
     });
   }
 
+  /// Rang de chaque ligne au classement (meilleure valeur : 1 ; à valeur
+  /// égale, par nom), si la liste en est un et qu'elle est triée par valeur.
+  Map<int, int>? get _ranks {
+    if (!widget.ranked || _sortBy != _SortBy.score) return null;
+    final lines = widget.lines;
+    final ranked = [for (var i = 0; i < lines.length; i++) i]
+      ..sort((i, j) {
+        final byValue = num.parse(lines[j].$2)
+            .compareTo(num.parse(lines[i].$2));
+        return byValue != 0 ? byValue : compareNames(lines[i].$1, lines[j].$1);
+      });
+    return {for (final (r, i) in ranked.indexed) i: r + 1};
+  }
+
   @override
   Widget build(BuildContext context) {
     const divider = BorderSide(color: dividerColor);
+    final ranks = _ranks;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1641,10 +1695,12 @@ class _LineListState extends State<_LineList> {
                     onTap: () => _sort(_SortBy.name),
                   ),
                 ),
+                // Sa droite collée à celle des valeurs ; flèche avant.
                 _SortHeader(
                   'Score',
                   arrow: _sortBy == _SortBy.score ? _ascending : null,
                   onTap: () => _sort(_SortBy.score),
+                  arrowPlacement: _ArrowPlacement.before,
                 ),
               ],
             ),
@@ -1660,7 +1716,10 @@ class _LineListState extends State<_LineList> {
               children: [
                 Expanded(
                   child: Text(
-                    widget.lines[i].$1,
+                    switch (ranks?[i]) {
+                      final rank? => '$rank. ${widget.lines[i].$1}',
+                      null => widget.lines[i].$1,
+                    },
                     style: _text,
                     softWrap: false,
                     overflow: TextOverflow.ellipsis,

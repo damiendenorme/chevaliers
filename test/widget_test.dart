@@ -504,17 +504,22 @@ void main() {
       final names = ['Arthur', 'Bors', 'Gauvain', 'Lancelot'];
       return names..sort(
         (a, b) => tester
-            .getRect(find.text(a))
+            .getRect(find.textContaining(a))
             .top
-            .compareTo(tester.getRect(find.text(b)).top),
+            .compareTo(tester.getRect(find.textContaining(b)).top),
       );
     }
 
     // Au départ, par score : du meilleur au moins bon, sans score en dernier.
     expect(order(), ['Lancelot', 'Bors', 'Arthur', 'Gauvain']);
+    // Trié par score : le rang devant le nom ; pas de rang sans score.
+    expect(find.text('1. Lancelot'), findsOneWidget);
+    expect(find.text('2. Bors'), findsOneWidget);
+    expect(find.text('3. Arthur'), findsOneWidget);
+    expect(find.text('Gauvain'), findsOneWidget);
     expect(
       tester.getRect(find.text('Score')).bottom,
-      lessThanOrEqualTo(tester.getRect(find.text('Lancelot')).top),
+      lessThanOrEqualTo(tester.getRect(find.textContaining('Lancelot')).top),
     );
 
     // Clic sur « Score » : sens inverse, sans score toujours en dernier.
@@ -522,16 +527,23 @@ void main() {
     await tester.pump();
     expect(order(), ['Arthur', 'Bors', 'Lancelot', 'Gauvain']);
 
+    // En sens inverse, les rangs restent ceux du classement.
+    expect(find.text('3. Arthur'), findsOneWidget);
+    expect(find.text('1. Lancelot'), findsOneWidget);
+
     // Retour au tri par nom, de A à Z, puis de Z à A.
     await tester.tap(find.text('Nom'));
     await tester.pump();
     expect(order(), ['Arthur', 'Bors', 'Gauvain', 'Lancelot']);
+    // Trié par nom : plus de rang.
+    expect(find.text('Arthur'), findsOneWidget);
+    expect(find.text('1. Lancelot'), findsNothing);
     await tester.tap(find.text('Nom'));
     await tester.pump();
     expect(order(), ['Lancelot', 'Gauvain', 'Bors', 'Arthur']);
 
     // Détail : ses jeux, puis ses parties dessous, au format de la liste.
-    await tester.tap(find.text('Arthur'));
+    await tester.tap(find.textContaining('Arthur'));
     await tester.pump();
     final partiesTitle = find.descendant(
       of: find.byType(RowList),
@@ -543,7 +555,7 @@ void main() {
     final score = tester.getRect(find.text('7'));
     expect(title.top, greaterThan(game.bottom));
     expect(score.top, greaterThan(title.bottom));
-    expect(find.text('Bors'), findsNWidgets(2));
+    expect(find.textContaining('Bors'), findsNWidgets(2));
 
     // Parties : par date au départ, puis triables par jeu ou par lieu.
     double y(String t) => tester.getRect(find.text(t).last).top;
@@ -602,8 +614,8 @@ void main() {
     expect(top('Dames'), lessThan(top('Échecs')));
     // Le tri de la liste de gauche n'a pas bougé.
     expect(
-      tester.getRect(find.text('Lancelot').first).top,
-      lessThan(tester.getRect(find.text('Arthur').first).top),
+      tester.getRect(find.textContaining('Lancelot').first).top,
+      lessThan(tester.getRect(find.textContaining('Arthur').first).top),
     );
   });
 
@@ -1018,13 +1030,13 @@ void main() {
     List<String> order() => ['Arthur', 'Bors', 'Gauvain']
       ..sort(
         (a, b) => tester
-            .getRect(find.text(a))
+            .getRect(find.textContaining(a))
             .top
-            .compareTo(tester.getRect(find.text(b)).top),
+            .compareTo(tester.getRect(find.textContaining(b)).top),
       );
 
     // La bannière (id 3) tout à droite de la ligne d'Arthur, sous « ID ».
-    final name = tester.getRect(find.text('Arthur'));
+    final name = tester.getRect(find.textContaining('Arthur'));
     final id = tester.getRect(inList('3'));
     final header = tester.getRect(inList('ID'));
     final listRight =
@@ -2261,6 +2273,70 @@ void main() {
     await follow(find.text('28.11.2026 La Crypte des Goules'));
     expect(active('Parties'), isTrue);
     expect(selected('Partie 7'), isTrue);
+  });
+
+  testWidgets('A game ranking sorts by name or score, with ranks', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => const RowTable(
+            columns: ['Nom'],
+            rows: [
+              ['Go'],
+            ],
+            sortableLists: true,
+            rankedLists: true,
+            lists: [
+              [('Lancelot', '1100'), ('Bors', '1020'), ('Arthur', '950')],
+            ],
+          ),
+          loadCounts: () async =>
+              (players: 3, events: 0, games: 0, boardGames: 1),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.descendant(of: find.byType(SectionBar), matching: find.text('Jeux')),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.text('Go'));
+    await tester.pump();
+
+    List<String> order() => ['Arthur', 'Bors', 'Lancelot']
+      ..sort(
+        (a, b) => tester
+            .getRect(find.textContaining(a))
+            .top
+            .compareTo(tester.getRect(find.textContaining(b)).top),
+      );
+    Finder header(String t) =>
+        find.descendant(of: find.byType(RowList), matching: find.text(t)).last;
+
+    // Par score au départ, avec les rangs.
+    expect(order(), ['Lancelot', 'Bors', 'Arthur']);
+    expect(find.text('1. Lancelot'), findsOneWidget);
+    expect(find.text('3. Arthur'), findsOneWidget);
+
+    // Score inversé : les rangs restent ceux du classement.
+    await tester.tap(header('Score'));
+    await tester.pump();
+    expect(order(), ['Arthur', 'Bors', 'Lancelot']);
+    expect(find.text('3. Arthur'), findsOneWidget);
+
+    // Par nom : de A à Z, sans rang.
+    await tester.tap(header('Nom'));
+    await tester.pump();
+    expect(order(), ['Arthur', 'Bors', 'Lancelot']);
+    expect(find.text('Arthur'), findsOneWidget);
+    expect(find.text('1. Lancelot'), findsNothing);
   });
 
   testWidgets('Hovering a button does not animate or resize it', (
