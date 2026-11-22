@@ -79,7 +79,8 @@ class _Cards extends StatelessWidget {
   }
 }
 
-/// Carte sombre à coins arrondis, liseré bronze et légère ombre ; son contenu
+/// Carte sur l'image Carte assombrie, à coins arrondis, liseré bronze et
+/// légère ombre ; son contenu
 /// (ligne active, survol) est découpé avec.
 class _Card extends StatelessWidget {
   const _Card(this.child);
@@ -102,7 +103,22 @@ class _Card extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: radius,
-          child: ColoredBox(color: topBarColor, child: child),
+          // Fond : l'image Carte, assombrie pour garder le texte clair
+          // lisible, étirée pour que son cadre suive les bords de la carte.
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: topBarColor,
+              image: DecorationImage(
+                image: const AssetImage('assets/Carte.jpg'),
+                fit: BoxFit.fill,
+                colorFilter: ColorFilter.mode(
+                  Colors.black.withValues(alpha: 0.72),
+                  BlendMode.srcATop,
+                ),
+              ),
+            ),
+            child: child,
+          ),
         ),
       ),
     );
@@ -198,7 +214,8 @@ class _MasterDetailState extends State<_MasterDetail> {
         children: [
           for (final i in _order(table))
             Material(
-              color: i == _selected ? accentColor : topBarColor,
+              // Transparente : le fond de la carte reste visible.
+              color: i == _selected ? accentColor : Colors.transparent,
               shape: Border(bottom: divider),
               child: InkWell(
                 onTap: () => setState(() => _selected = i),
