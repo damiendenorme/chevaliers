@@ -5,6 +5,7 @@ import 'data/rows.dart';
 import 'supabase_config.dart';
 import 'widgets/row_list.dart';
 import 'widgets/section_buttons.dart';
+import 'widgets/top_bar.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,6 +14,25 @@ Future<void> main() async {
     publishableKey: supabasePublishableKey,
   );
   runApp(const MyApp());
+}
+
+/// Nombre de joueurs, d'événements, de parties et de jeux en base.
+typedef Counts = ({int players, int events, int games, int boardGames});
+
+Future<Counts> fetchCounts() async {
+  final db = Supabase.instance.client;
+  final (players, events, games, boardGames) = await (
+    db.from('joueur').count(CountOption.exact),
+    db.from('evenement').count(CountOption.exact),
+    db.from('partie').count(CountOption.exact),
+    db.from('jeu').count(CountOption.exact),
+  ).wait;
+  return (
+    players: players,
+    events: events,
+    games: games,
+    boardGames: boardGames,
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -40,9 +60,16 @@ class MyApp extends StatelessWidget {
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, this.loadRows = fetchRows});
+  const MyHomePage({
+    super.key,
+    this.loadRows = fetchRows,
+    this.loadCounts = fetchCounts,
+  });
 
   final Future<RowTable> Function(String table) loadRows;
+
+  /// Nombres affichés dans l'encoche du haut de l'écran.
+  final Future<Counts> Function() loadCounts;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
@@ -70,6 +97,8 @@ class _MyHomePageState extends State<MyHomePage> {
   /// Section affichée au démarrage : les parties.
   static const _startSection = 2;
 
+  late final Future<Counts> _counts = widget.loadCounts();
+
   /// Section affichée, dont le bouton est actif.
   int _active = _startSection;
 
@@ -96,49 +125,77 @@ class _MyHomePageState extends State<MyHomePage> {
             fit: BoxFit.cover,
           ),
         ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Colonne de 1000px centrée : boutons centrés en haut, tableaux
-              // dessous, chacun toujours au même emplacement.
-              Expanded(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: Padding(
-                    // En bas, la même distance que celle entre le haut de
-                    // l'écran et les boutons : le pied du tableau reste fixe.
-                    padding: const EdgeInsets.fromLTRB(
-                      12,
-                      12,
-                      12,
-                      12 + _buttonsTop,
-                    ),
-                    child: SizedBox(
-                      width: RowList.width,
-                      child: Column(
-                        children: [
-                          const SizedBox(height: _buttonsTop),
-                          SectionBar(
-                            child: SectionButtons(
-                              buttons: [
-                                for (final (label, _) in _sections) label,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    // Colonne de 1000px centrée : boutons centrés en haut, tableaux
+                    // dessous, chacun toujours au même emplacement.
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: Padding(
+                          // En bas, la même distance que celle entre le haut de
+                          // l'écran et les boutons : le pied du tableau reste fixe.
+                          padding: const EdgeInsets.fromLTRB(
+                            12,
+                            12,
+                            12,
+                            12 + _buttonsTop,
+                          ),
+                          child: SizedBox(
+                            width: RowList.width,
+                            child: Column(
+                              children: [
+                                const SizedBox(height: _buttonsTop),
+                                SectionBar(
+                                  child: SectionButtons(
+                                    buttons: [
+                                      for (final (label, _) in _sections) label,
+                                    ],
+                                    active: _active,
+                                    onPressed: _showTable,
+                                  ),
+                                ),
+                                const SizedBox(height: _tableGap),
+                                Expanded(
+                                  child: RowList(
+                                    key: ObjectKey(_rows),
+                                    rows: _rows,
+                                  ),
+                                ),
                               ],
-                              active: _active,
-                              onPressed: _showTable,
                             ),
                           ),
-                          const SizedBox(height: _tableGap),
-                          Expanded(
-                            child: RowList(key: ObjectKey(_rows), rows: _rows),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+            // Encoche contre le bord du haut de l'écran : les nombres de
+            // joueurs, d'événements, de parties et de jeux.
+            Align(
+              alignment: Alignment.topCenter,
+              child: FutureBuilder<Counts>(
+                future: _counts,
+                builder: (context, snapshot) {
+                  final c = snapshot.data;
+                  return TopNotch(
+                    items: [
+                      (Icons.person, 'Joueurs', c?.players),
+                      (Icons.confirmation_number, 'Événements', c?.events),
+                      (Icons.flag, 'Parties', c?.games),
+                      (Icons.casino, 'Jeux', c?.boardGames),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );

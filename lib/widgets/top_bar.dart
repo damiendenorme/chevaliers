@@ -24,6 +24,62 @@ const lightShadow = [
   BoxShadow(color: Color(0x66000000), blurRadius: 4, offset: Offset(0, 1)),
 ];
 
+/// Encoche suspendue au bord du haut de l'écran, au style de la barre :
+/// une rangée d'informations (icône + nombre). Tant qu'un nombre est
+/// inconnu, un tiret.
+///
+/// Son haut dépasse de l'écran : seuls ses côtés et son bas, arrondis,
+/// sont visibles, comme accrochés au bord.
+class TopNotch extends StatelessWidget {
+  const TopNotch({super.key, required this.items});
+
+  /// Icône, libellé (pour les lecteurs d'écran) et nombre de chaque
+  /// information, de gauche à droite.
+  final List<(IconData, String, int?)> items;
+
+  /// Partie cachée au-dessus de l'écran (rayon des coins et bourrelet).
+  static const double _hidden = 12;
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.translate(
+      offset: const Offset(0, -_hidden),
+      child: BevelEdge(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, _hidden + 6, 16, 6),
+          decoration: BoxDecoration(
+            color: topBarColor,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: lightShadow,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 16,
+            children: [
+              for (final (icon, label, value) in items)
+                Semantics(
+                  label: '$label : ${value ?? 'inconnu'}',
+                  excludeSemantics: true,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 4,
+                    children: [
+                      Icon(icon, size: 16),
+                      Text(
+                        value?.toString() ?? '–',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Bordure en bourrelet bronze, en relief, identique sur tout le tour (pas
 /// de lumière projetée) : un centre clair entre deux bords sombres, comme un
 /// jonc arrondi, avec une ombre portée interne en haut. Dessinée par-dessus

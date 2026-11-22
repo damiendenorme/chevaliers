@@ -8,6 +8,10 @@ import 'package:chevaliers/widgets/row_list.dart';
 import 'package:chevaliers/widgets/section_buttons.dart';
 import 'package:chevaliers/widgets/top_bar.dart';
 
+/// Texte [t] dans la carte des listes (hors encoche du haut de l'écran).
+Finder inList(String t) =>
+    find.descendant(of: find.byType(RowList), matching: find.text(t));
+
 void main() {
   testWidgets('No header or footer; the table scrolls, not the screen', (
     tester,
@@ -67,7 +71,10 @@ void main() {
 
     final rects = [for (var i = 0; i < 4; i++) tester.getRect(buttons.at(i))];
     const labels = ['Joueurs', 'Événements', 'Parties', 'Jeux'];
-    expect(find.byType(Icon), findsNothing);
+    expect(
+      find.descendant(of: buttons, matching: find.byType(Icon)),
+      findsNothing,
+    );
     for (var i = 0; i < 4; i++) {
       expect(
         find.descendant(of: buttons.at(i), matching: find.text(labels[i])),
@@ -137,7 +144,7 @@ void main() {
     expect(isActive('Parties'), isTrue);
     expect(isActive('Joueurs'), isFalse);
     expect(requested, ['partie']);
-    expect(find.text('–'), findsOneWidget);
+    expect(inList('–'), findsOneWidget);
     expect(find.text('Lancelot'), findsOneWidget);
 
     final buttons = find.byType(SectionButton);
@@ -198,7 +205,7 @@ void main() {
     await tester.pumpAndSettle();
     // Joueur 1 à gauche, scores au milieu, joueur 2 à droite de la liste.
     final p1 = tester.getRect(find.text('Arthur'));
-    final scores = tester.getRect(find.text('–'));
+    final scores = tester.getRect(inList('–'));
     final p2 = tester.getRect(find.text('Lancelot'));
     expect(p1.left, playersTable.left + 12);
     expect(
@@ -221,7 +228,7 @@ void main() {
     expect(alpha('Lancelot'), lessThan(1));
     expect(alpha('2'), lessThan(1));
     expect(alpha('Arthur') ?? 1, 1);
-    await tester.tap(find.text('–'));
+    await tester.tap(inList('–'));
     await tester.pumpAndSettle();
     expect(find.text('Score 1'), findsOneWidget);
     expect(find.text('Échecs'), findsOneWidget);
@@ -631,6 +638,52 @@ void main() {
     await tester.tap(find.text('Date'));
     await tester.pump();
     expect(order(), ['Automne', 'Été', 'Printemps']);
+  });
+
+  testWidgets('A notch against the top edge shows the four counts', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => const RowTable(columns: ['Nom'], rows: []),
+          loadCounts: () async =>
+              (players: 7, events: 1, games: 20, boardGames: 3),
+        ),
+      ),
+    );
+    final notch = find.byType(TopNotch);
+    // Pendant le chargement : un tiret par nombre.
+    expect(
+      find.descendant(of: notch, matching: find.text('–')),
+      findsNWidgets(4),
+    );
+    await tester.pump();
+
+    Finder inNotch(String t) =>
+        find.descendant(of: notch, matching: find.text(t));
+    final values = [inNotch('7'), inNotch('1'), inNotch('20'), inNotch('3')];
+    for (final v in values) {
+      expect(v, findsOneWidget);
+    }
+    // Dans l'ordre : joueurs, événements, parties, jeux.
+    for (var i = 1; i < values.length; i++) {
+      expect(
+        tester.getRect(values[i]).left,
+        greaterThan(tester.getRect(values[i - 1]).right),
+      );
+    }
+    // Accrochée au bord du haut, centrée, au-dessus de la barre des boutons.
+    final box = tester.getRect(
+      find.descendant(of: notch, matching: find.byType(Container)).first,
+    );
+    expect(box.top, lessThan(0));
+    expect(box.center.dx, moreOrLessEquals(1400 / 2));
+    expect(box.bottom, lessThan(tester.getRect(find.byType(SectionBar)).top));
   });
 
   testWidgets('Hovering a button does not animate or resize it', (
