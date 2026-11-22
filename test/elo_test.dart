@@ -182,7 +182,7 @@ void main() {
       event: event,
       people: who,
     );
-    final glory = rpgGlory([
+    final glory = rpgGlory(now: DateTime(2026, 12), [
       // Ordre de saisie mélangé : le calcul suit les dates.
       party(3, 20, 1, 7, {1, 3}), // 2e partie du jeu 1, 2e de l'événement 7
       party(1, 10, 1, 7, {
@@ -243,5 +243,19 @@ void main() {
       [for (var i = 2; i <= 12; i++) points[(i, 1)]],
       [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10],
     );
+  });
+
+  test('rpgGlory: only the points of the last 12 months count', () {
+    GlorySession party(int id, DateTime date) =>
+        (id: id, date: date, game: 1, event: 7, people: const {1});
+    final sessions = [
+      party(1, DateTime(2025, 3, 1)), // trop ancienne : 1+5+2, ne compte pas
+      party(2, DateTime(2025, 12, 15)), // dans les 12 mois : série de 2
+      party(3, DateTime(2026, 6, 1)), // série de 3
+    ];
+    expect(rpgGlory(sessions, now: DateTime(2026, 12, 1)), {1: 2 + 3});
+    // Un an pile : la partie du jour même compte encore.
+    expect(rpgGlory(sessions, now: DateTime(2026, 12, 15)), {1: 2 + 3});
+    expect(rpgGlory(sessions, now: DateTime(2026, 12, 16)), {1: 3});
   });
 }

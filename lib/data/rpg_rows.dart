@@ -82,10 +82,8 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
       ),
   ];
   final participation = rpgParticipationPoints(glorySessions);
-  final glory = <int, int>{};
-  for (final MapEntry(key: (_, player), :value) in participation.entries) {
-    glory[player] = (glory[player] ?? 0) + value;
-  }
+  // Gloire des joueurs : seulement les points des 12 derniers mois.
+  final glory = rpgGlory(glorySessions);
 
   // Numéro d'ordre de chaque partie dans son événement (1, 2…), par date.
   final eventOrder = <int, int>{};
@@ -310,13 +308,23 @@ typedef GlorySession = ({
 });
 
 /// Gloire de chaque joueur (id → points) : la somme de ses points à chaque
-/// partie (voir [rpgParticipationPoints]).
-Map<int, int> rpgGlory(Iterable<GlorySession> sessions) {
+/// partie (voir [rpgParticipationPoints]) des 12 derniers mois, jusqu'à
+/// [now] (aujourd'hui par défaut). Les parties plus anciennes ne rapportent
+/// plus rien, mais comptent toujours pour les séries et les « premières ».
+Map<int, int> rpgGlory(Iterable<GlorySession> sessions, {DateTime? now}) {
+  final today = now ?? DateTime.now();
+  final since = DateTime(today.year - 1, today.month, today.day);
+  final recent = {
+    for (final s in sessions)
+      if (!s.date.isBefore(since)) s.id,
+  };
   final glory = <int, int>{};
-  for (final MapEntry(key: (_, player), :value) in rpgParticipationPoints(
+  for (final MapEntry(key: (session, player), :value) in rpgParticipationPoints(
     sessions,
   ).entries) {
-    glory[player] = (glory[player] ?? 0) + value;
+    if (recent.contains(session)) {
+      glory[player] = (glory[player] ?? 0) + value;
+    }
   }
   return glory;
 }
