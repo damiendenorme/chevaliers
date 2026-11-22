@@ -13,6 +13,7 @@ import 'widgets/party_dialog.dart';
 import 'widgets/rpg_party_dialog.dart';
 import 'widgets/row_list.dart';
 import 'widgets/section_buttons.dart';
+import 'widgets/title_banner.dart';
 import 'widgets/top_bar.dart';
 
 Future<void> main() async {
@@ -281,6 +282,16 @@ class _MyHomePageState extends State<MyHomePage> {
               child: AccentScope(
                 style: _bookmarks[_bookmark].$2,
                 child: LoginLink(auth: widget.auth),
+              ),
+            ),
+            // En haut à gauche, collée au bord du haut : la bannière du
+            // site, aux couleurs de la page affichée.
+            Positioned(
+              top: 0,
+              left: 24,
+              child: AccentScope(
+                style: _bookmarks[_bookmark].$2,
+                child: const TitleBanner(),
               ),
             ),
             // En haut à droite, à l'écart des bords : Discord, puis Facebook

@@ -1426,9 +1426,9 @@ class _IdBanner extends StatelessWidget {
     final accent = AccentStyle.of(context);
     // Bordure de la couleur des éléments choisis, qui suit la forme.
     return CustomPaint(
-      foregroundPainter: _BannerBorderPainter(notch, accent.border),
+      foregroundPainter: BannerBorderPainter(notch, accent.border),
       child: ClipPath(
-        clipper: _BannerClipper(notch),
+        clipper: BannerClipper(notch),
         child: Container(
           width: width,
           height: height,
@@ -1453,7 +1453,7 @@ class _IdBanner extends StatelessWidget {
 }
 
 /// Forme de bannière : rectangle au bas échancré en V.
-Path _bannerPath(Size size, double notch) => Path()
+Path bannerPath(Size size, double notch) => Path()
   ..moveTo(0, 0)
   ..lineTo(size.width, 0)
   ..lineTo(size.width, size.height)
@@ -1461,21 +1461,21 @@ Path _bannerPath(Size size, double notch) => Path()
   ..lineTo(0, size.height)
   ..close();
 
-class _BannerClipper extends CustomClipper<Path> {
-  const _BannerClipper(this.notch);
+class BannerClipper extends CustomClipper<Path> {
+  const BannerClipper(this.notch);
 
   final double notch;
 
   @override
-  Path getClip(Size size) => _bannerPath(size, notch);
+  Path getClip(Size size) => bannerPath(size, notch);
 
   @override
-  bool shouldReclip(_BannerClipper old) => old.notch != notch;
+  bool shouldReclip(BannerClipper old) => old.notch != notch;
 }
 
 /// Bordure de la bannière, le long de sa forme (à l'intérieur).
-class _BannerBorderPainter extends CustomPainter {
-  const _BannerBorderPainter(this.notch, this.color);
+class BannerBorderPainter extends CustomPainter {
+  const BannerBorderPainter(this.notch, this.color);
 
   final double notch;
   final Color color;
@@ -1483,9 +1483,9 @@ class _BannerBorderPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     canvas.save();
-    canvas.clipPath(_bannerPath(size, notch));
+    canvas.clipPath(bannerPath(size, notch));
     canvas.drawPath(
-      _bannerPath(size, notch),
+      bannerPath(size, notch),
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
@@ -1495,7 +1495,7 @@ class _BannerBorderPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_BannerBorderPainter old) =>
+  bool shouldRepaint(BannerBorderPainter old) =>
       old.notch != notch || old.color != color;
 }
 
