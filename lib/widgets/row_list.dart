@@ -184,7 +184,10 @@ class _MasterDetailState extends State<_MasterDetail> {
               // Transparente : le fond de la carte reste visible. Choisie :
               // le fond texturé doré.
               color: Colors.transparent,
-              shape: Border(bottom: divider),
+              // Choisie : tout autour, une bordure grise un peu plus claire.
+              shape: i == _selected
+                  ? Border.all(color: selectedBorderColor)
+                  : const Border(bottom: divider),
               child: Ink(
                 decoration: i == _selected ? accentTexture : null,
                 child: InkWell(

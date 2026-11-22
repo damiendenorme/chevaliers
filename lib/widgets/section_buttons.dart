@@ -84,7 +84,14 @@ class SectionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: topBarColor,
-      borderRadius: BorderRadius.circular(8),
+      // Actif : bordure grise un peu plus claire, comme l'élément choisi
+      // d'une liste.
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: active
+            ? const BorderSide(color: selectedBorderColor)
+            : BorderSide.none,
+      ),
       clipBehavior: Clip.antiAlias,
       // Actif : le fond texturé doré.
       child: Ink(
