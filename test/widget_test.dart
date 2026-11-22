@@ -185,6 +185,19 @@ void main() {
     expect(playersTable.center.dx, moreOrLessEquals(1400 / 2));
     expect(tester.getRect(find.text('Arthur')).left, playersTable.left + 12);
 
+    // Rien de choisi : une invitation au centre de la carte du détail.
+    const prompt = 'Sélectionnez un élément à gauche.';
+    final promptRect = tester.getRect(find.text(prompt));
+    final detailLeft = playersTable.left + RowList.listWidth + RowList.gap;
+    expect(
+      promptRect.center.dx,
+      moreOrLessEquals((detailLeft + playersTable.right) / 2),
+    );
+    expect(
+      promptRect.center.dy,
+      moreOrLessEquals(playersTable.center.dy, epsilon: 1),
+    );
+
     // Au clic sur une ligne, son détail s'affiche à droite de la liste.
     await tester.tap(find.text('Lancelot'));
     await tester.pumpAndSettle();
@@ -192,6 +205,7 @@ void main() {
     // joueur n'est pas repris.
     expect(find.byType(Table), findsNothing);
     expect(find.text('Nom'), findsNothing);
+    expect(find.text(prompt), findsNothing);
     expect(find.text('Lancelot'), findsOneWidget);
     final label = tester.getRect(find.text('Jeu favori'));
     final value = tester.getRect(find.text('Échecs'));
@@ -264,6 +278,14 @@ void main() {
     await tester.tap(buttons.at(3));
     await tester.pumpAndSettle();
     expect(find.text('Aucune ligne.'), findsOneWidget);
+    // Au centre de la carte de gauche.
+    final empty = tester.getRect(find.text('Aucune ligne.'));
+    final listCard = tester.getRect(find.byType(RowList));
+    expect(
+      empty.center.dx,
+      moreOrLessEquals(listCard.left + RowList.listWidth / 2),
+    );
+    expect(empty.center.dy, moreOrLessEquals(listCard.center.dy, epsilon: 1));
 
     expect(requested, ['partie', 'joueur', 'partie', 'jeu']);
   });
@@ -898,6 +920,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Arthur'), findsOneWidget);
     expect(wargame, ['partie', 'jeu']);
+  });
+
+  testWidgets('A custom global score label replaces « Score »', (tester) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => const RowTable(
+            columns: ['Nom'],
+            rows: [
+              ['Merlin'],
+            ],
+            forms: [[]],
+            globalScores: [1050],
+            globalScoreLabel: 'Gloire',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(inList('Gloire'), findsOneWidget);
+    expect(inList('Score'), findsNothing);
   });
 
   testWidgets('Hovering a button does not animate or resize it', (

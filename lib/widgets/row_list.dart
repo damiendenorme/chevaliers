@@ -127,7 +127,7 @@ class _MasterDetailState extends State<_MasterDetail> {
   /// Titre de la colonne de cette valeur, ou null : liste sans en-tête.
   String? get _valueLabel {
     final table = widget.table;
-    if (table.globalScores != null) return 'Score';
+    if (table.globalScores != null) return table.globalScoreLabel;
     if (table.badges != null) return 'Joueurs';
     if (table.dates != null) return 'Date';
     return null;
@@ -266,8 +266,16 @@ class _MasterDetailState extends State<_MasterDetail> {
                 Expanded(child: list),
               ],
             ),
+      // Rien de choisi : une invitation, au centre de la carte du détail.
       detail: _selected == null
-          ? null
+          ? Center(
+              child: Text(
+                'Sélectionnez un élément à gauche.',
+                style: _text.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            )
           // La zone de photos remplit le bas de la carte (son message, s'il
           // n'y a pas de photo, y est centré).
           : CustomScrollView(
@@ -1149,9 +1157,18 @@ class _Message extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Text(text, style: _text),
+    // Au centre de la carte, comme l'invitation de la carte du détail.
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: _text.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
     );
   }
 }

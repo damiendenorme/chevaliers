@@ -14,6 +14,7 @@ class RowTable {
     this.badges,
     this.forms,
     this.globalScores,
+    this.globalScoreLabel = 'Score',
     this.matchLists,
     this.matchDetails,
     this.photos,
@@ -54,6 +55,10 @@ class RowTable {
   final List<int?>? globalScores;
 
   int? globalScore(int index) => globalScores?[index];
+
+  /// Nom du score global dans l'en-tête de la liste : « Score » (Wargame),
+  /// « Gloire » (RPG).
+  final String globalScoreLabel;
 
   /// Parties listées en bas du détail de chaque ligne (pour les joueurs :
   /// les siennes, de la plus récente à la plus ancienne).
@@ -166,8 +171,9 @@ List<MatchDetail> _matchDetails({
   required Map<int, String> playerNames,
   required Map<int, String> gameNames,
   bool Function(EloGame game)? where,
+  double start = eloStart,
 }) {
-  final deltas = eloDeltas(games);
+  final deltas = eloDeltas(games, start: start);
   final forms = {for (final id in playerNames.keys) id: recentForm(games, id)};
   return [
     for (final (i, g) in games.indexed.toList().reversed)
@@ -209,6 +215,9 @@ String? resolveImageAsset(String base, Iterable<String> assets) {
   }
   return null;
 }
+
+/// ELO de départ selon les données : 0 au RPG (la Gloire), 1000 sinon.
+double _start(String prefix) => prefix == 'rpg_' ? rpgEloStart : eloStart;
 
 /// Toutes les parties, dans l'ordre chronologique, pour le calcul du ELO,
 /// avec le lieu, la date et l'id de chacune (même ordre).
@@ -292,6 +301,7 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
       for (final j in boardGames) j['id'] as int: j['nom'] as String,
     };
     final details = _matchDetails(
+      start: _start(prefix),
       games: games,
       places: places,
       dates: dates,
@@ -331,7 +341,7 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
       db.from('${prefix}jeu').select('id, nom').order('nom', ascending: true),
       _fetchGames(db, prefix),
     ).wait;
-    final elo = computeElo(games);
+    final elo = computeElo(games, start: _start(prefix));
     final gameNames = {
       for (final j in boardGames) j['id'] as int: j['nom'] as String,
     };
@@ -360,6 +370,7 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
       matchLists: [
         for (final p in players)
           _matchDetails(
+            start: _start(prefix),
             games: games,
             places: places,
             dates: dates,
@@ -373,7 +384,14 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
         for (final p in players) bannerAsset('$prefix$table', p['id'] as int),
       ],
       forms: [for (final p in players) recentForm(games, p['id'] as int)],
-      globalScores: [for (final p in players) globalElo(elo, p['id'] as int)],
+      // Sans partie : rien au Wargame ; au RPG, la Gloire de départ, 0.
+      globalScores: [
+        for (final p in players)
+          globalElo(elo, p['id'] as int) ??
+              (prefix == 'rpg_' ? rpgEloStart.round() : null),
+      ],
+      // Au RPG, le score général d'un joueur s'appelle la Gloire.
+      globalScoreLabel: prefix == 'rpg_' ? 'Gloire' : 'Score',
       columns: const ['Nom'],
       rows: [
         for (final p in players) [p['nom'] as String],
@@ -390,7 +408,7 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
           .order('nom', ascending: true),
       _fetchGames(db, prefix),
     ).wait;
-    final elo = computeElo(games);
+    final elo = computeElo(games, start: _start(prefix));
     final playerNames = {
       for (final p in players) p['id'] as int: p['nom'] as String,
     };
@@ -403,6 +421,7 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
       matchLists: [
         for (final j in boardGames)
           _matchDetails(
+            start: _start(prefix),
             games: games,
             places: places,
             dates: dates,

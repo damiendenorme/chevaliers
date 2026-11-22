@@ -149,4 +149,11 @@ void main() {
     // 10 ne doit pas trouver 1.
     expect(resolveImageAsset(bannerAsset('jeu', 10), assets), isNull);
   });
+
+  test('RPG: the Gloire starts at 0', () {
+    final elo = computeElo([g(1, 1, 2, 3, 1)], start: rpgEloStart);
+    expect(elo[1]![1], 50);
+    expect(elo[1]![2], -50);
+    expect(globalElo(computeElo([], start: rpgEloStart), 1), isNull);
+  });
 }
