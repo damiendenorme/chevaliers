@@ -168,6 +168,57 @@ class CardSurface extends StatelessWidget {
   }
 }
 
+/// Survol bombé : sous [child], le fond brun du survol de la page, à peine
+/// bombé (l'inverse de l'effet de creux des éléments choisis) : un peu plus
+/// clair en haut, un peu plus sombre en bas, avec une touche de la texture
+/// des cartes. Rien si [enabled] est faux (élément choisi).
+class HoverBulge extends StatefulWidget {
+  const HoverBulge({super.key, required this.child, this.enabled = true});
+
+  final Widget child;
+  final bool enabled;
+
+  @override
+  State<HoverBulge> createState() => _HoverBulgeState();
+}
+
+class _HoverBulgeState extends State<HoverBulge> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final hover = AccentStyle.of(context).hover;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: DecoratedBox(
+        decoration: _hovered && widget.enabled
+            ? BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color.lerp(hover, Colors.white, 0.06)!,
+                    hover,
+                    hover,
+                    Color.lerp(hover, Colors.black, 0.18)!,
+                  ],
+                  stops: const [0, 0.4, 0.7, 1],
+                ),
+                // Une touche de la texture de pierre des cartes.
+                image: const DecorationImage(
+                  image: AssetImage('assets/Carte.jpg'),
+                  fit: BoxFit.cover,
+                  opacity: 0.12,
+                ),
+              )
+            : const BoxDecoration(),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 /// Plaque au design de l'encoche du haut (fond sombre, bourrelet bronze,
 /// ombre), posée librement : ses quatre coins sont arrondis.
 class Plate extends StatelessWidget {

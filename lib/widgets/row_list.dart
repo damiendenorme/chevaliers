@@ -208,25 +208,28 @@ class _MasterDetailState extends State<_MasterDetail> {
                 child: InkWell(
                   key: ValueKey(i == _selected),
                   onTap: () => setState(() => _selected = i),
-                  hoverColor: i == _selected
-                      ? Colors.transparent
-                      : AccentStyle.of(context).hover,
-                  // Choisie : en creux, comme le libellé actif de la barre
-                  // (ombre portée interne en haut).
-                  child: DecoratedBox(
-                    position: DecorationPosition.foreground,
-                    decoration: i == _selected
-                        ? const BoxDecoration(gradient: _insetShadow)
-                        : const BoxDecoration(),
-                    child: Padding(
-                      padding: _cellPadding,
-                      child: _MasterLine(
-                        table,
-                        i,
-                        selected: i == _selected,
-                        style: i == _selected
-                            ? _text.copyWith(color: Colors.white)
-                            : _text,
+                  // Survol bombé (voir [HoverBulge]), sauf si elle est
+                  // choisie.
+                  hoverColor: Colors.transparent,
+                  child: HoverBulge(
+                    enabled: i != _selected,
+                    // Choisie : en creux, comme le libellé actif de la barre
+                    // (ombre portée interne en haut).
+                    child: DecoratedBox(
+                      position: DecorationPosition.foreground,
+                      decoration: i == _selected
+                          ? const BoxDecoration(gradient: _insetShadow)
+                          : const BoxDecoration(),
+                      child: Padding(
+                        padding: _cellPadding,
+                        child: _MasterLine(
+                          table,
+                          i,
+                          selected: i == _selected,
+                          style: i == _selected
+                              ? _text.copyWith(color: Colors.white)
+                              : _text,
+                        ),
                       ),
                     ),
                   ),
@@ -611,31 +614,34 @@ class _SortHeader extends StatelessWidget {
           ? const StrutStyle(fontSize: 14, forceStrutHeight: true)
           : null,
     );
+    // Survol bombé (voir [HoverBulge]).
     return InkWell(
       onTap: onTap,
-      hoverColor: AccentStyle.of(context).hover,
-      child: Padding(
-        padding: padding,
-        child: arrowPlacement == _ArrowPlacement.centered
-            // Centré : seul le titre compte pour la place ; la flèche est
-            // dessinée juste à sa droite, sans le décaler.
-            ? Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.center,
-                children: [
-                  text,
-                  if (icon != null) Positioned(right: -14, child: icon),
-                ],
-              )
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                spacing: 2,
-                children: [
-                  if (arrowPlacement == _ArrowPlacement.before) ?icon,
-                  text,
-                  if (arrowPlacement == _ArrowPlacement.after) ?icon,
-                ],
-              ),
+      hoverColor: Colors.transparent,
+      child: HoverBulge(
+        child: Padding(
+          padding: padding,
+          child: arrowPlacement == _ArrowPlacement.centered
+              // Centré : seul le titre compte pour la place ; la flèche est
+              // dessinée juste à sa droite, sans le décaler.
+              ? Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    text,
+                    if (icon != null) Positioned(right: -14, child: icon),
+                  ],
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 2,
+                  children: [
+                    if (arrowPlacement == _ArrowPlacement.before) ?icon,
+                    text,
+                    if (arrowPlacement == _ArrowPlacement.after) ?icon,
+                  ],
+                ),
+        ),
       ),
     );
   }

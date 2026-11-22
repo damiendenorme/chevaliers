@@ -101,30 +101,35 @@ class SectionButton extends StatelessWidget {
         child: InkWell(
           key: ValueKey(active),
           onTap: onPressed,
-          hoverColor: active
-              ? Colors.transparent
-              : AccentStyle.of(context).hover,
-          // Actif : en creux, comme le marque-page choisi (ombre portée
-          // interne en haut).
-          child: DecoratedBox(
-            position: DecorationPosition.foreground,
-            decoration: active
-                ? const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Color(0x99000000), Color(0x00000000)],
-                      stops: [0, 0.4],
-                    ),
-                  )
-                : const BoxDecoration(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: active ? Colors.white : null,
+          // Survol bombé (voir [HoverBulge]), sauf s'il est actif.
+          hoverColor: Colors.transparent,
+          child: HoverBulge(
+            enabled: !active,
+            // Actif : en creux, comme le marque-page choisi (ombre portée
+            // interne en haut).
+            child: DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration: active
+                  ? const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0x99000000), Color(0x00000000)],
+                        stops: [0, 0.4],
+                      ),
+                    )
+                  : const BoxDecoration(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: active ? Colors.white : null,
+                  ),
                 ),
               ),
             ),

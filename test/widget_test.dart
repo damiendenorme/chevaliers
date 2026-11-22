@@ -863,34 +863,39 @@ void main() {
     expect(wargame, ['partie', 'jeu']);
 
     // Élément choisi (menu, liste) : pas de survol, son fond reste visible.
-    Color? hoverIn(Finder item, Type type) => tester
-        .widget<InkWell>(
-          find
-              .descendant(
-                of: find.ancestor(of: item, matching: find.byType(type)).first,
-                matching: find.byType(InkWell),
-              )
-              .first,
+    // Survol bombé : actif sur les éléments non choisis seulement.
+    bool hoverIn(Finder item) => tester
+        .widget<HoverBulge>(
+          find.ancestor(of: item, matching: find.byType(HoverBulge)).first,
         )
-        .hoverColor;
-    expect(hoverIn(find.text('Jeux'), SectionButton), Colors.transparent);
-    expect(
-      hoverIn(find.text('Joueurs'), SectionButton),
-      isNot(Colors.transparent),
-    );
-    Color? rowHover() => tester
-        .widget<InkWell>(
-          find.ancestor(
-            of: find.text('Arthur'),
-            matching: find.byType(InkWell),
-          ),
-        )
-        .hoverColor;
+        .enabled;
+    expect(hoverIn(find.text('Jeux')), isFalse);
+    expect(hoverIn(find.text('Joueurs')), isTrue);
     await tester.pump(); // Chargement de la liste des jeux.
-    expect(rowHover(), isNot(Colors.transparent));
+    expect(hoverIn(find.text('Arthur')), isTrue);
     await tester.tap(find.text('Arthur'));
     await tester.pump();
-    expect(rowHover(), Colors.transparent);
+    expect(hoverIn(find.text('Arthur')), isFalse);
+
+    // Au survol d'un élément non choisi : un fond bombé (dégradé vertical).
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(find.text('Joueurs')));
+    await tester.pump();
+    final bulge = tester.widget<DecoratedBox>(
+      find
+          .descendant(
+            of: find
+                .ancestor(
+                  of: find.text('Joueurs'),
+                  matching: find.byType(HoverBulge),
+                )
+                .first,
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
+    );
+    expect((bulge.decoration as BoxDecoration).gradient, isA<LinearGradient>());
+    await mouse.removePointer();
 
     // RPG : sa page, avec ses données et ses nombres, au même design.
     await tester.tap(find.text('RPG'));
