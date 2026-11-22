@@ -181,7 +181,6 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
         globalScores: [
           for (final p in sorted) glory[p['id'] as int] ?? rpgEloStart.round(),
         ],
-        globalScoreLabel: 'Gloire',
         // Ses parties (comme MJ ou comme joueur), comme dans le détail d'un
         // jeu : date, scénario, événement, et les bannières des joueurs.
         sessionLines: [

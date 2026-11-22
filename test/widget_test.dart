@@ -518,12 +518,12 @@ void main() {
     expect(find.text('3. Arthur'), findsOneWidget);
     expect(find.text('Gauvain'), findsOneWidget);
     expect(
-      tester.getRect(find.text('Score')).bottom,
+      tester.getRect(find.text('Gloire')).bottom,
       lessThanOrEqualTo(tester.getRect(find.textContaining('Lancelot')).top),
     );
 
-    // Clic sur « Score » : sens inverse, sans score toujours en dernier.
-    await tester.tap(find.text('Score'));
+    // Clic sur « Gloire » : sens inverse, sans score toujours en dernier.
+    await tester.tap(find.text('Gloire'));
     await tester.pump();
     expect(order(), ['Arthur', 'Bors', 'Lancelot', 'Gauvain']);
 
@@ -976,7 +976,7 @@ void main() {
     expect(wargame, ['partie', 'jeu']);
   });
 
-  testWidgets('A custom global score label replaces « Score »', (tester) async {
+  testWidgets('The global score is labelled « Gloire »', (tester) async {
     tester.view.physicalSize = const Size(1400, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -991,7 +991,6 @@ void main() {
             ],
             forms: [[]],
             globalScores: [1050],
-            globalScoreLabel: 'Gloire',
           ),
         ),
       ),
@@ -1044,14 +1043,14 @@ void main() {
     expect(id.left, greaterThan(name.right));
     expect(id.center.dy, moreOrLessEquals(name.center.dy, epsilon: 2));
     expect(id.right, lessThanOrEqualTo(listRight - 12));
-    // « ID » centré sur les bannières ; la droite de « Score » collée à
+    // « ID » centré sur les bannières ; la droite de « Gloire » collée à
     // celle des scores.
     final banner = tester.getRect(
       find.ancestor(of: inList('3'), matching: find.byType(ClipPath)).first,
     );
     expect(header.center.dx, moreOrLessEquals(banner.center.dx));
     expect(
-      tester.getRect(inList('Score')).right,
+      tester.getRect(inList('Gloire')).right,
       moreOrLessEquals(tester.getRect(inList('1000')).right),
     );
 
@@ -2335,7 +2334,7 @@ void main() {
     expect(find.text('3. Arthur'), findsOneWidget);
 
     // Score inversé : les rangs restent ceux du classement.
-    await tester.tap(header('Score'));
+    await tester.tap(header('Gloire'));
     await tester.pump();
     expect(order(), ['Arthur', 'Bors', 'Lancelot']);
     expect(find.text('3. Arthur'), findsOneWidget);

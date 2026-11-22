@@ -347,7 +347,7 @@ class _MasterDetailState extends State<_MasterDetail> {
   /// Titre de la colonne de cette valeur, ou null : liste sans en-tête.
   String? get _valueLabel {
     final table = widget.table;
-    if (table.globalScores != null) return table.globalScoreLabel;
+    if (table.globalScores != null) return 'Gloire';
     if (table.badges != null) return 'Joueurs';
     if (table.dates != null) return 'Date';
     return null;
@@ -1720,7 +1720,7 @@ class _LineListState extends State<_LineList> {
                 ),
                 // Sa droite collée à celle des valeurs ; flèche avant.
                 _SortHeader(
-                  'Score',
+                  'Gloire',
                   arrow: _sortBy == _SortBy.score ? _ascending : null,
                   onTap: () => _sort(_SortBy.score),
                   arrowPlacement: _ArrowPlacement.before,

@@ -15,7 +15,6 @@ class RowTable {
     this.badges,
     this.forms,
     this.globalScores,
-    this.globalScoreLabel = 'Score',
     this.ids,
     this.matchLists,
     this.matchDetails,
@@ -75,10 +74,6 @@ class RowTable {
   final List<int>? ids;
 
   int? id(int index) => ids?[index];
-
-  /// Nom du score global dans l'en-tête de la liste : « Score » (Wargame),
-  /// « Gloire » (RPG).
-  final String globalScoreLabel;
 
   /// Parties listées en bas du détail de chaque ligne (pour les joueurs :
   /// les siennes, de la plus récente à la plus ancienne).
@@ -459,7 +454,10 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
       for (final p in players) playerGames(elo, p['id'] as int, gameNames),
     ];
     return RowTable(
+      // Ses jeux, triables par nom ou par Gloire ; le rang devant le nom
+      // quand ils sont triés par Gloire.
       sortableLists: true,
+      rankedLists: true,
       // Pastilles par jeu : les 5 dernières parties du joueur à ce jeu.
       listForms: [
         for (final (i, p) in players.indexed)
@@ -509,7 +507,6 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
               (prefix == 'rpg_' ? rpgEloStart.round() : null),
       ],
       // Au RPG, le score général d'un joueur s'appelle la Gloire.
-      globalScoreLabel: prefix == 'rpg_' ? 'Gloire' : 'Score',
       columns: const ['Nom'],
       rows: [
         for (final p in players) [p['nom'] as String],
