@@ -190,13 +190,15 @@ class _MasterDetailState extends State<_MasterDetail> {
               color: Colors.transparent,
               // Choisie : tout autour, une bordure grise un peu plus claire.
               shape: i == _selected
-                  ? Border.all(color: selectedBorderColor)
+                  ? Border.all(color: AccentStyle.of(context).border)
                   : const Border(bottom: divider),
               child: Ink(
-                decoration: i == _selected ? accentTexture : null,
+                decoration: i == _selected
+                    ? AccentStyle.of(context).texture
+                    : null,
                 child: InkWell(
                   onTap: () => setState(() => _selected = i),
-                  hoverColor: hoverColor,
+                  hoverColor: AccentStyle.of(context).hover,
                   // Choisie : en creux, comme le libellé actif de la barre
                   // (ombre portée interne en haut).
                   child: DecoratedBox(
@@ -510,7 +512,7 @@ class _SortHeader extends StatelessWidget {
     final style = _text.copyWith(fontSize: 12, color: color);
     return InkWell(
       onTap: onTap,
-      hoverColor: hoverColor,
+      hoverColor: AccentStyle.of(context).hover,
       child: Padding(
         padding: _cellPadding,
         child: Row(

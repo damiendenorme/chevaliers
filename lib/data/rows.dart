@@ -220,9 +220,9 @@ Future<
     List<int> ids,
   })
 >
-_fetchGames(SupabaseClient db) async {
+_fetchGames(SupabaseClient db, String prefix) async {
   final rows = await db
-      .from('partie')
+      .from('${prefix}partie')
       .select(
         'id, jeu_id, joueur1_id, joueur2_id, score_joueur1, score_joueur2, '
         'lieu, created_at',
@@ -255,7 +255,11 @@ _fetchGames(SupabaseClient db) async {
 /// Pour `jeu` : le nom, le classement ELO des joueurs qui y ont joué et ses
 /// parties.
 /// Pour les autres tables : le nom.
-Future<RowTable> fetchRows(String table) async {
+///
+/// [prefix] : préfixe des tables, vide pour le Wargame, `rpg_` pour le RPG
+/// (données séparées, même structure). Les bannières suivent le même
+/// préfixe : `assets/bannieres/rpg_jeu/<id>`…
+Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
   final db = Supabase.instance.client;
 
   if (table == 'partie') {
@@ -265,11 +269,11 @@ Future<RowTable> fetchRows(String table) async {
       (:games, :places, :dates, :ids),
       photoRows,
     ) = await (
-      db.from('joueur').select('id, nom'),
-      db.from('jeu').select('id, nom'),
-      _fetchGames(db),
+      db.from('${prefix}joueur').select('id, nom'),
+      db.from('${prefix}jeu').select('id, nom'),
+      _fetchGames(db, prefix),
       db
-          .from('photo')
+          .from('${prefix}photo')
           .select('partie_id, chemin')
           .order('created_at', ascending: true)
           .order('id', ascending: true),
@@ -298,7 +302,9 @@ Future<RowTable> fetchRows(String table) async {
     final recent = games.indexed.toList().reversed.toList();
     return RowTable(
       // La bannière d'une partie est celle du jeu joué.
-      banners: [for (final (_, g) in recent) bannerAsset('jeu', g.game)],
+      banners: [
+        for (final (_, g) in recent) bannerAsset('${prefix}jeu', g.game),
+      ],
       matchups: [for (final d in details) d.matchup],
       matchDetails: details,
       photos: [for (final (i, _) in recent) photosByGame[ids[i]] ?? const []],
@@ -318,9 +324,12 @@ Future<RowTable> fetchRows(String table) async {
 
   if (table == 'joueur') {
     final (players, boardGames, (:games, :places, :dates, ids: _)) = await (
-      db.from('joueur').select('id, nom').order('nom', ascending: true),
-      db.from('jeu').select('id, nom').order('nom', ascending: true),
-      _fetchGames(db),
+      db
+          .from('${prefix}joueur')
+          .select('id, nom')
+          .order('nom', ascending: true),
+      db.from('${prefix}jeu').select('id, nom').order('nom', ascending: true),
+      _fetchGames(db, prefix),
     ).wait;
     final elo = computeElo(games);
     final gameNames = {
@@ -360,7 +369,9 @@ Future<RowTable> fetchRows(String table) async {
           ),
       ],
       lists: playerLists,
-      banners: [for (final p in players) bannerAsset(table, p['id'] as int)],
+      banners: [
+        for (final p in players) bannerAsset('$prefix$table', p['id'] as int),
+      ],
       forms: [for (final p in players) recentForm(games, p['id'] as int)],
       globalScores: [for (final p in players) globalElo(elo, p['id'] as int)],
       columns: const ['Nom'],
@@ -372,9 +383,12 @@ Future<RowTable> fetchRows(String table) async {
 
   if (table == 'jeu') {
     final (boardGames, players, (:games, :places, :dates, ids: _)) = await (
-      db.from('jeu').select('id, nom').order('nom', ascending: true),
-      db.from('joueur').select('id, nom').order('nom', ascending: true),
-      _fetchGames(db),
+      db.from('${prefix}jeu').select('id, nom').order('nom', ascending: true),
+      db
+          .from('${prefix}joueur')
+          .select('id, nom')
+          .order('nom', ascending: true),
+      _fetchGames(db, prefix),
     ).wait;
     final elo = computeElo(games);
     final playerNames = {
@@ -397,7 +411,10 @@ Future<RowTable> fetchRows(String table) async {
             where: (g) => g.game == j['id'],
           ),
       ],
-      banners: [for (final j in boardGames) bannerAsset(table, j['id'] as int)],
+      banners: [
+        for (final j in boardGames)
+          bannerAsset('$prefix$table', j['id'] as int),
+      ],
       columns: const ['Nom'],
       rows: [
         for (final j in boardGames) [j['nom'] as String],
@@ -427,7 +444,7 @@ Future<RowTable> fetchRows(String table) async {
 
   if (table == 'evenement') {
     final rows = await db
-        .from('evenement')
+        .from('${prefix}evenement')
         .select('id, nom, date')
         .order('nom', ascending: true);
     final dates = [
@@ -435,7 +452,9 @@ Future<RowTable> fetchRows(String table) async {
         if (r['date'] case final String d) DateTime.parse(d) else null,
     ];
     return RowTable(
-      banners: [for (final r in rows) bannerAsset(table, r['id'] as int)],
+      banners: [
+        for (final r in rows) bannerAsset('$prefix$table', r['id'] as int),
+      ],
       dates: dates,
       columns: const ['Nom', 'Date'],
       rows: [
@@ -449,11 +468,13 @@ Future<RowTable> fetchRows(String table) async {
   }
 
   final rows = await db
-      .from(table)
+      .from('$prefix$table')
       .select('id, nom')
       .order('nom', ascending: true);
   return RowTable(
-    banners: [for (final r in rows) bannerAsset(table, r['id'] as int)],
+    banners: [
+      for (final r in rows) bannerAsset('$prefix$table', r['id'] as int),
+    ],
     columns: const ['Nom'],
     rows: [
       for (final r in rows) [r['nom'] as String],

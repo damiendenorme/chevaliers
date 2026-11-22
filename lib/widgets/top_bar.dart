@@ -4,35 +4,87 @@ import 'package:flutter/material.dart';
 /// sombre de cuir ancien.
 const topBarColor = Color(0xFF1E1915);
 
-/// Liseré des cartes et de la barre : bronze patiné, touche médiévale.
-const edgeColor = Color(0xFF5A4630);
-
 /// Séparateurs entre les éléments des listes : gris, discret sur le fond
 /// sombre des cartes.
 const dividerColor = Color(0xFF3A3532);
 
-/// Bordure de l'élément choisi d'une liste ou d'un menu : un gris clair
-/// teinté d'or, qui rappelle le bronze du bourrelet des cartes.
-const selectedBorderColor = Color(0xFF9C8458);
+/// Couleur d'accentuation d'une page : le fond texturé des éléments actifs
+/// (la pierre de l'image Carte teintée de [color], ses veines restant
+/// sombres), la bordure de l'élément choisi d'une liste ou d'un menu, le
+/// survol et le bourrelet des cartes.
+class AccentStyle {
+  const AccentStyle(
+    this.color,
+    this.border, {
+    required this.hover,
+    required this.edge,
+  });
 
-/// Couleur des éléments actifs : marron sombre, comme le bois de l'image de
-/// Couleur des éléments actifs : bronze doré, avec le texte en blanc.
-const accentColor = Color(0xFF8C6A2E);
+  /// Couleur des éléments actifs, avec le texte en blanc.
+  final Color color;
 
-/// Fond texturé des éléments actifs : la pierre de l'image Carte teintée de
-/// [accentColor] (ses veines restent sombres), dans l'esprit des cartes.
-const accentTexture = BoxDecoration(
-  color: accentColor,
-  image: DecorationImage(
-    image: AssetImage('assets/Carte.jpg'),
-    fit: BoxFit.cover,
-    colorFilter: ColorFilter.mode(accentColor, BlendMode.multiply),
-  ),
-);
+  /// Bordure de l'élément choisi : un gris clair teinté de [color].
+  final Color border;
 
-/// Couleur des survols : brun, dans les tons de l'accent mais plus discret,
-/// pour garder le texte clair lisible.
-const hoverColor = Color(0xFF3D2A1A);
+  /// Survols : dans les tons de [color], plus discret, pour garder le texte
+  /// clair lisible.
+  final Color hover;
+
+  /// Bourrelet des cartes, de l'extérieur vers l'intérieur : bord sombre,
+  /// centre clair, bord sombre.
+  final (Color, Color, Color) edge;
+
+  /// Wargame : bronze doré, qui rappelle le bourrelet des cartes.
+  static const wargame = AccentStyle(
+    Color(0xFF9E7C38),
+    Color(0xFFAA9262),
+    hover: Color(0xFF45301E),
+    edge: (Color(0xFF3A2A18), Color(0xFFC8A66C), Color(0xFF4A3822)),
+  );
+
+  /// RPG : bronze, plus cuivré et plus sombre que l'or du Wargame.
+  static const rpg = AccentStyle(
+    Color(0xFF6C4321),
+    Color(0xFF84654F),
+    hover: Color(0xFF2C1D14),
+    edge: (Color(0xFF26170D), Color(0xFF946233), Color(0xFF342112)),
+  );
+
+  BoxDecoration get texture => BoxDecoration(
+    color: color,
+    image: DecorationImage(
+      image: const AssetImage('assets/Carte.jpg'),
+      fit: BoxFit.cover,
+      colorFilter: ColorFilter.mode(color, BlendMode.multiply),
+    ),
+  );
+
+  /// Accentuation de la page qui contient [context] (Wargame par défaut).
+  static AccentStyle of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AccentScope>()?.style ??
+      wargame;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AccentStyle &&
+      other.color == color &&
+      other.border == border &&
+      other.hover == hover &&
+      other.edge == edge;
+
+  @override
+  int get hashCode => Object.hash(color, border, hover, edge);
+}
+
+/// Donne l'accentuation [style] à tout ce qu'il contient (une page).
+class AccentScope extends InheritedWidget {
+  const AccentScope({super.key, required this.style, required super.child});
+
+  final AccentStyle style;
+
+  @override
+  bool updateShouldNotify(AccentScope old) => old.style != style;
+}
 
 /// Légère ombre portée des boutons et des cartes.
 const lightShadow = [
@@ -128,7 +180,11 @@ class Bookmark extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.active = false,
+    this.accent = AccentStyle.wargame,
   });
+
+  /// Couleur d'accentuation, quand il est actif : celle de sa page.
+  final AccentStyle accent;
 
   /// Largeur visible.
   static const double width = 40;
@@ -148,46 +204,50 @@ class Bookmark extends StatelessWidget {
     final shift = active ? 0.0 : -_activeExtra;
     const hiddenPart = _hidden + _activeExtra;
     const total = width + hiddenPart;
-    return Transform.translate(
-      offset: Offset(-_hidden + shift, 0),
-      child: SizedBox(
-        width: total,
-        child: Semantics(
-          button: true,
-          selected: active,
-          // Non choisi : sans effet de creux, et bombé (un reflet le long du
-          // marque-page, plus sombre vers ses bords visibles).
-          child: CardSurface(
-            inset: active,
-            Material(
-              color: Colors.transparent,
-              child: Ink(
-                decoration: active
-                    ? accentTexture
-                    : const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Color(0x40000000),
-                            Color(0x2EFFFFFF),
-                            Color(0x00FFFFFF),
-                            Color(0x66000000),
-                          ],
-                          stops: [hiddenPart / total, 0.55, 0.75, 1],
+    // Bourrelet et survol aux couleurs de sa page.
+    return AccentScope(
+      style: accent,
+      child: Transform.translate(
+        offset: Offset(-_hidden + shift, 0),
+        child: SizedBox(
+          width: total,
+          child: Semantics(
+            button: true,
+            selected: active,
+            // Non choisi : sans effet de creux, et bombé (un reflet le long du
+            // marque-page, plus sombre vers ses bords visibles).
+            child: CardSurface(
+              inset: active,
+              Material(
+                color: Colors.transparent,
+                child: Ink(
+                  decoration: active
+                      ? accent.texture
+                      : const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Color(0x40000000),
+                              Color(0x2EFFFFFF),
+                              Color(0x00FFFFFF),
+                              Color(0x66000000),
+                            ],
+                            stops: [hiddenPart / total, 0.55, 0.75, 1],
+                          ),
                         ),
-                      ),
-                child: InkWell(
-                  onTap: onPressed,
-                  hoverColor: hoverColor,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(hiddenPart, 20, 0, 20),
-                    child: Center(
-                      child: RotatedBox(
-                        quarterTurns: 3,
-                        child: Text(
-                          label,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: active ? Colors.white : null,
+                  child: InkWell(
+                    onTap: onPressed,
+                    hoverColor: accent.hover,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(hiddenPart, 20, 0, 20),
+                      child: Center(
+                        child: RotatedBox(
+                          quarterTurns: 3,
+                          child: Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: active ? Colors.white : null,
+                            ),
                           ),
                         ),
                       ),
@@ -283,23 +343,30 @@ class BevelEdge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      foregroundPainter: _BevelPainter(radius, inset: inset),
+      foregroundPainter: _BevelPainter(
+        radius,
+        inset: inset,
+        edge: AccentStyle.of(context).edge,
+      ),
       child: child,
     );
   }
 }
 
 class _BevelPainter extends CustomPainter {
-  const _BevelPainter(this.radius, {required this.inset});
+  const _BevelPainter(this.radius, {required this.inset, required this.edge});
 
   final double radius;
+
+  /// Couleurs du bourrelet (voir [AccentStyle.edge]).
+  final (Color, Color, Color) edge;
   final bool inset;
 
   /// Du bord extérieur vers l'intérieur : (épaisseur, couleur).
-  static const _rings = [
-    (1.0, Color(0xFF3A2A18)),
-    (2.0, Color(0xFFB8955F)),
-    (1.0, Color(0xFF4A3822)),
+  List<(double, Color)> get _rings => [
+    (1.0, edge.$1),
+    (2.0, edge.$2),
+    (1.0, edge.$3),
   ];
 
   /// Hauteur de l'ombre portée interne, en haut.
@@ -345,5 +412,5 @@ class _BevelPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_BevelPainter old) =>
-      old.radius != radius || old.inset != inset;
+      old.radius != radius || old.inset != inset || old.edge != edge;
 }

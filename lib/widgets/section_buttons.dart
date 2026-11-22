@@ -89,16 +89,16 @@ class SectionButton extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: active
-            ? const BorderSide(color: selectedBorderColor)
+            ? BorderSide(color: AccentStyle.of(context).border)
             : BorderSide.none,
       ),
       clipBehavior: Clip.antiAlias,
       // Actif : le fond texturé doré.
       child: Ink(
-        decoration: active ? accentTexture : null,
+        decoration: active ? AccentStyle.of(context).texture : null,
         child: InkWell(
           onTap: onPressed,
-          hoverColor: hoverColor,
+          hoverColor: AccentStyle.of(context).hover,
           // Actif : en creux, comme le marque-page choisi (ombre portée
           // interne en haut).
           child: DecoratedBox(

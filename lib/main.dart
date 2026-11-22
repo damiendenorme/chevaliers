@@ -19,13 +19,14 @@ Future<void> main() async {
 /// Nombre de joueurs, d'événements, de parties et de jeux en base.
 typedef Counts = ({int players, int events, int games, int boardGames});
 
-Future<Counts> fetchCounts() async {
+/// [prefix] : préfixe des tables (voir [fetchRows]).
+Future<Counts> fetchCounts({String prefix = ''}) async {
   final db = Supabase.instance.client;
   final (players, events, games, boardGames) = await (
-    db.from('joueur').count(CountOption.exact),
-    db.from('evenement').count(CountOption.exact),
-    db.from('partie').count(CountOption.exact),
-    db.from('jeu').count(CountOption.exact),
+    db.from('${prefix}joueur').count(CountOption.exact),
+    db.from('${prefix}evenement').count(CountOption.exact),
+    db.from('${prefix}partie').count(CountOption.exact),
+    db.from('${prefix}jeu').count(CountOption.exact),
   ).wait;
   return (
     players: players,
@@ -61,63 +62,41 @@ class MyApp extends StatelessWidget {
   }
 }
 
+/// Données RPG : mêmes tables que le Wargame, préfixées par rpg_.
+Future<RowTable> fetchRpgRows(String table) => fetchRows(table, prefix: 'rpg_');
+Future<Counts> fetchRpgCounts() => fetchCounts(prefix: 'rpg_');
+
+/// L'écran : le fond, les marque-pages Wargame et RPG à gauche, Discord en
+/// haut à droite, et la page du marque-page choisi. Chaque page a ses
+/// propres données et garde son état quand on change de marque-page.
 class MyHomePage extends StatefulWidget {
   const MyHomePage({
     super.key,
     this.loadRows = fetchRows,
     this.loadCounts = fetchCounts,
+    this.loadRpgRows = fetchRpgRows,
+    this.loadRpgCounts = fetchRpgCounts,
   });
 
+  /// Données de la page Wargame.
   final Future<RowTable> Function(String table) loadRows;
-
-  /// Nombres affichés dans l'encoche du haut de l'écran.
   final Future<Counts> Function() loadCounts;
+
+  /// Données de la page RPG.
+  final Future<RowTable> Function(String table) loadRpgRows;
+  final Future<Counts> Function() loadRpgCounts;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  /// Boutons au-dessus des tableaux : libellé et table affichée au clic.
-  static const _sections = [
-    ('Joueurs', 'joueur'),
-    ('Événements', 'evenement'),
-    ('Parties', 'partie'),
-    ('Jeux', 'jeu'),
-  ];
-
-  // Distances mesurées depuis le haut de la zone (sous sa marge de 12px).
-  // Boutons et tableau se règlent indépendamment.
-
-  /// Haut de la barre des boutons.
-  static const double _buttonsTop = 52;
-
-  /// Écart entre la barre des boutons et le tableau : le même qu'entre les
-  /// deux cartes.
-  static const double _tableGap = RowList.gap;
-
-  /// Section affichée au démarrage : les parties.
-  static const _startSection = 2;
-
-  late final Future<Counts> _counts = widget.loadCounts();
-
   /// Marque-pages du bord gauche de l'écran, et celui qui est actif.
-  static const _bookmarks = ['Wargame', 'RPG'];
+  static const _bookmarks = [
+    ('Wargame', AccentStyle.wargame),
+    ('RPG', AccentStyle.rpg),
+  ];
   int _bookmark = 0;
-
-  /// Section affichée, dont le bouton est actif.
-  int _active = _startSection;
-
-  /// Lignes de la table affichée.
-  late Future<RowTable> _rows = widget.loadRows(_sections[_startSection].$2);
-
-  void _showTable(int index) {
-    final rows = widget.loadRows(_sections[index].$2);
-    setState(() {
-      _active = index;
-      _rows = rows;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -152,53 +131,27 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
               ),
             ),
+            // La page du marque-page choisi ; l'autre reste en mémoire.
             Positioned.fill(
-              child: SafeArea(
-                child: Column(
-                  children: [
-                    // Colonne de 1000px centrée : boutons centrés en haut, tableaux
-                    // dessous, chacun toujours au même emplacement.
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.topCenter,
-                        child: Padding(
-                          // En bas, la même distance que celle entre le haut de
-                          // l'écran et les boutons : le pied du tableau reste fixe.
-                          padding: const EdgeInsets.fromLTRB(
-                            12,
-                            12,
-                            12,
-                            12 + _buttonsTop,
-                          ),
-                          child: SizedBox(
-                            width: RowList.width,
-                            child: Column(
-                              children: [
-                                const SizedBox(height: _buttonsTop),
-                                SectionBar(
-                                  child: SectionButtons(
-                                    buttons: [
-                                      for (final (label, _) in _sections) label,
-                                    ],
-                                    active: _active,
-                                    onPressed: _showTable,
-                                  ),
-                                ),
-                                const SizedBox(height: _tableGap),
-                                Expanded(
-                                  child: RowList(
-                                    key: ObjectKey(_rows),
-                                    rows: _rows,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+              child: IndexedStack(
+                index: _bookmark,
+                children: [
+                  AccentScope(
+                    style: AccentStyle.wargame,
+                    child: GamePage(
+                      loadRows: widget.loadRows,
+                      loadCounts: widget.loadCounts,
                     ),
-                  ],
-                ),
+                  ),
+                  // RPG : accentuation bronze.
+                  AccentScope(
+                    style: AccentStyle.rpg,
+                    child: GamePage(
+                      loadRows: widget.loadRpgRows,
+                      loadCounts: widget.loadRpgCounts,
+                    ),
+                  ),
+                ],
               ),
             ),
             // Marque-pages contre le bord gauche de l'écran, centrés
@@ -212,52 +165,157 @@ class _MyHomePageState extends State<MyHomePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 spacing: 8,
                 children: [
-                  for (final (i, label) in _bookmarks.indexed)
+                  for (final (i, (label, accent)) in _bookmarks.indexed)
                     Bookmark(
                       label: label,
+                      accent: accent,
                       active: i == _bookmark,
                       onPressed: () => setState(() => _bookmark = i),
                     ),
                 ],
               ),
             ),
-            // En haut à droite, à l'écart des bords : Discord.
-            const Positioned(
+            // En haut à droite, à l'écart des bords : Discord, aux couleurs
+            // de la page affichée.
+            Positioned(
               top: 12,
               right: 12,
-              child: Plate(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: 8,
-                  children: [
-                    Icon(Icons.discord, size: 18),
-                    Text('Discord', style: TextStyle(fontSize: 14)),
-                  ],
-                ),
-              ),
-            ),
-            // Encoche contre le bord du haut de l'écran : les nombres de
-            // joueurs, d'événements, de parties et de jeux.
-            Align(
-              alignment: Alignment.topCenter,
-              child: FutureBuilder<Counts>(
-                future: _counts,
-                builder: (context, snapshot) {
-                  final c = snapshot.data;
-                  return TopNotch(
-                    items: [
-                      (Icons.person, 'Joueurs', c?.players),
-                      (Icons.confirmation_number, 'Événements', c?.events),
-                      (Icons.flag, 'Parties', c?.games),
-                      (Icons.casino, 'Jeux', c?.boardGames),
+              child: AccentScope(
+                style: _bookmarks[_bookmark].$2,
+                child: const Plate(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 8,
+                    children: [
+                      Icon(Icons.discord, size: 18),
+                      Text('Discord', style: TextStyle(fontSize: 14)),
                     ],
-                  );
-                },
+                  ),
+                ),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Une page (Wargame ou RPG) : l'encoche des nombres en haut, la barre des
+/// sections et les deux cartes, avec les données de [loadRows] et
+/// [loadCounts].
+class GamePage extends StatefulWidget {
+  const GamePage({super.key, required this.loadRows, required this.loadCounts});
+
+  final Future<RowTable> Function(String table) loadRows;
+
+  /// Nombres affichés dans l'encoche du haut de l'écran.
+  final Future<Counts> Function() loadCounts;
+
+  @override
+  State<GamePage> createState() => _GamePageState();
+}
+
+class _GamePageState extends State<GamePage> {
+  /// Boutons au-dessus des tableaux : libellé et table affichée au clic.
+  static const _sections = [
+    ('Joueurs', 'joueur'),
+    ('Événements', 'evenement'),
+    ('Parties', 'partie'),
+    ('Jeux', 'jeu'),
+  ];
+
+  // Distances mesurées depuis le haut de la zone (sous sa marge de 12px).
+  // Boutons et tableau se règlent indépendamment.
+
+  /// Haut de la barre des boutons.
+  static const double _buttonsTop = 52;
+
+  /// Écart entre la barre des boutons et le tableau : le même qu'entre les
+  /// deux cartes.
+  static const double _tableGap = RowList.gap;
+
+  /// Section affichée au démarrage : les parties.
+  static const _startSection = 2;
+
+  late final Future<Counts> _counts = widget.loadCounts();
+
+  /// Section affichée, dont le bouton est actif.
+  int _active = _startSection;
+
+  /// Lignes de la table affichée.
+  late Future<RowTable> _rows = widget.loadRows(_sections[_startSection].$2);
+
+  void _showTable(int index) {
+    final rows = widget.loadRows(_sections[index].$2);
+    setState(() {
+      _active = index;
+      _rows = rows;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: SafeArea(
+            // Colonne de 1000px centrée : boutons centrés en haut, tableaux
+            // dessous, chacun toujours au même emplacement.
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                // En bas, la même distance que celle entre le haut de
+                // l'écran et les boutons : le pied du tableau reste fixe.
+                padding: const EdgeInsets.fromLTRB(
+                  12,
+                  12,
+                  12,
+                  12 + _buttonsTop,
+                ),
+                child: SizedBox(
+                  width: RowList.width,
+                  child: Column(
+                    children: [
+                      const SizedBox(height: _buttonsTop),
+                      SectionBar(
+                        child: SectionButtons(
+                          buttons: [for (final (label, _) in _sections) label],
+                          active: _active,
+                          onPressed: _showTable,
+                        ),
+                      ),
+                      const SizedBox(height: _tableGap),
+                      Expanded(
+                        child: RowList(key: ObjectKey(_rows), rows: _rows),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Encoche contre le bord du haut de l'écran : les nombres de
+        // joueurs, d'événements, de parties et de jeux.
+        Align(
+          alignment: Alignment.topCenter,
+          child: FutureBuilder<Counts>(
+            future: _counts,
+            builder: (context, snapshot) {
+              final c = snapshot.data;
+              return TopNotch(
+                items: [
+                  (Icons.person, 'Joueurs', c?.players),
+                  (Icons.confirmation_number, 'Événements', c?.events),
+                  (Icons.flag, 'Parties', c?.games),
+                  (Icons.casino, 'Jeux', c?.boardGames),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

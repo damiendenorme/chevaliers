@@ -74,6 +74,9 @@ flutter:
     - assets/bannieres/evenement/
     - assets/bannieres/partie/
     - assets/bannieres/jeu/
+    - assets/bannieres/rpg_joueur/
+    - assets/bannieres/rpg_evenement/
+    - assets/bannieres/rpg_jeu/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

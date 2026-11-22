@@ -147,7 +147,7 @@ void main() {
         find.descendant(of: button, matching: find.byType(Ink)).first,
       );
       final text = tester.widget<Text>(find.text(label));
-      return ink.decoration == accentTexture &&
+      return ink.decoration == AccentStyle.wargame.texture &&
           text.style?.color == Colors.white;
     }
 
@@ -739,6 +739,83 @@ void main() {
     await tester.pump();
     expect(active('RPG'), isTrue);
     expect(active('Wargame'), isFalse);
+  });
+
+  testWidgets('The RPG bookmark shows its own, independent page', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final wargame = <String>[];
+    final rpg = <String>[];
+    RowTable names(List<String> names) => RowTable(
+      columns: const ['Nom'],
+      rows: [
+        for (final n in names) [n],
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (table) async {
+            wargame.add(table);
+            return names(['Arthur']);
+          },
+          loadCounts: () async =>
+              (players: 7, events: 1, games: 20, boardGames: 3),
+          loadRpgRows: (table) async {
+            rpg.add(table);
+            return names(['Merlin']);
+          },
+          loadRpgCounts: () async =>
+              (players: 2, events: 0, games: 5, boardGames: 1),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Wargame au départ, avec ses données et ses nombres.
+    expect(find.text('Arthur'), findsOneWidget);
+    expect(find.text('Merlin'), findsNothing);
+    Finder inNotch(String t) =>
+        find.descendant(of: find.byType(TopNotch), matching: find.text(t));
+    expect(inNotch('20'), findsOneWidget);
+
+    // Sur Wargame, on passe aux jeux.
+    await tester.tap(find.text('Jeux'));
+    await tester.pump();
+    expect(wargame, ['partie', 'jeu']);
+
+    // RPG : sa page, avec ses données et ses nombres, au même design.
+    await tester.tap(find.text('RPG'));
+    await tester.pump();
+    expect(find.text('Merlin'), findsOneWidget);
+    expect(find.text('Arthur'), findsNothing);
+    expect(inNotch('5'), findsOneWidget);
+    expect(inNotch('20'), findsNothing);
+    expect(find.byType(SectionBar), findsOneWidget);
+    expect(rpg, ['partie']);
+    // Accentuation du RPG : le libellé actif (Parties) de sa page.
+    final activeInk = tester.widget<Ink>(
+      find
+          .descendant(
+            of: find.ancestor(
+              of: find.text('Parties'),
+              matching: find.byType(SectionButton),
+            ),
+            matching: find.byType(Ink),
+          )
+          .first,
+    );
+    expect(activeInk.decoration, AccentStyle.rpg.texture);
+
+    // Retour au Wargame : il a gardé sa section, sans recharger.
+    await tester.tap(find.text('Wargame'));
+    await tester.pump();
+    expect(find.text('Arthur'), findsOneWidget);
+    expect(wargame, ['partie', 'jeu']);
   });
 
   testWidgets('Hovering a button does not animate or resize it', (
