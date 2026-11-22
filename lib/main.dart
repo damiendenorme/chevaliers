@@ -509,11 +509,29 @@ class _GamePageState extends State<GamePage> {
   /// Lignes de la table affichée.
   late Future<RowTable> _rows = widget.loadRows(_sections[_startSection].$2);
 
+  /// Ligne à sélectionner à l'arrivée sur la section (id), après un clic
+  /// dans le détail d'un autre onglet.
+  int? _selectId;
+
   void _showTable(int index) {
     final rows = widget.loadRows(_sections[index].$2);
     setState(() {
       _active = index;
       _rows = rows;
+      _selectId = null;
+    });
+  }
+
+  /// Va à l'élément [id] de la section de [table] (« joueur », « jeu »,
+  /// « partie »), et le sélectionne.
+  void _navigate(String table, int id) {
+    final index = _sections.indexWhere((s) => s.$2 == table);
+    if (index < 0) return;
+    final rows = widget.loadRows(table);
+    setState(() {
+      _active = index;
+      _rows = rows;
+      _selectId = id;
     });
   }
 
@@ -560,6 +578,10 @@ class _GamePageState extends State<GamePage> {
                             return RowList(
                               key: ObjectKey(_rows),
                               rows: _rows,
+                              // Un clic sur un jeu ou une partie du détail y
+                              // mène.
+                              onNavigate: _navigate,
+                              selectId: _selectId,
                               onAdd: signedIn ? _adder : null,
                               // Connecté : résumé des parties modifiable.
                               onEditSummary: signedIn

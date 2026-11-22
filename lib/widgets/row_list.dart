@@ -22,11 +22,20 @@ class RowList extends StatelessWidget {
     this.onEditSummary,
     this.onAddPhoto,
     this.guestEditor,
+    this.onNavigate,
+    this.selectId,
   });
 
   /// Si non nul : les joueurs d'une partie de JDR se retirent et s'ajoutent
   /// (backoffice).
   final GuestEditor? guestEditor;
+
+  /// Si non nul : un clic sur un jeu ou une partie du détail y mène (table,
+  /// id).
+  final void Function(String table, int id)? onNavigate;
+
+  /// Id de la ligne à sélectionner à l'arrivée.
+  final int? selectId;
 
   /// Si non nul : ajout d'une photo à une partie (backoffice), avec l'id de
   /// la partie ; renvoie l'URL de la photo, ou null si rien n'a été choisi.
@@ -96,6 +105,8 @@ class RowList extends StatelessWidget {
           onEditSummary: onEditSummary,
           onAddPhoto: onAddPhoto,
           guestEditor: guestEditor,
+          onNavigate: onNavigate,
+          selectId: selectId,
         );
       },
     );
@@ -201,9 +212,17 @@ class _MasterDetail extends StatefulWidget {
     this.onEditSummary,
     this.onAddPhoto,
     this.guestEditor,
+    this.onNavigate,
+    this.selectId,
   });
 
   final RowTable table;
+
+  /// Aller à un élément d'un autre onglet (table, id).
+  final void Function(String table, int id)? onNavigate;
+
+  /// Id de la ligne à sélectionner à l'arrivée (voir [RowTable.rowIds]).
+  final int? selectId;
 
   /// Connecté : modification des joueurs des parties de JDR.
   final GuestEditor? guestEditor;
@@ -218,8 +237,15 @@ class _MasterDetail extends StatefulWidget {
 enum _SortBy { name, score, id }
 
 class _MasterDetailState extends State<_MasterDetail> {
-  /// Ligne affichée à droite, ou null tant qu'aucune n'est choisie.
-  int? _selected;
+  /// Ligne affichée à droite, ou null tant qu'aucune n'est choisie. À
+  /// l'arrivée depuis un autre onglet, celle de [_MasterDetail.selectId].
+  late int? _selected = switch (widget.selectId) {
+    final id? => switch (widget.table.rowIds?.indexOf(id)) {
+      final i? when i >= 0 => i,
+      _ => null,
+    },
+    null => null,
+  };
 
   /// Résumés modifiés depuis le chargement, par id de partie : affichés sans
   /// recharger la liste (la sélection reste).
@@ -544,11 +570,33 @@ class _MasterDetailState extends State<_MasterDetail> {
                         table.list(_selected!),
                         sortable: table.sortableLists,
                         forms: table.listForm(_selected!),
+                        // Un clic sur un élément (jeu, joueur) y mène.
+                        onTap: switch ((
+                          widget.onNavigate,
+                          table.listIds?[_selected!],
+                        )) {
+                          (final go?, final ids?) => (i) => go(
+                            table.listTable,
+                            ids[i],
+                          ),
+                          _ => null,
+                        },
                       ),
                       _MatchupList(
                         key: ValueKey(('parties', _selected)),
                         table.matchList(_selected!),
                         showGame: table.matchListShowsGame,
+                        // Un clic sur une partie y mène.
+                        onTap: switch ((
+                          widget.onNavigate,
+                          table.matchListIds?[_selected!],
+                        )) {
+                          (final go?, final ids?) => (i) => go(
+                            'partie',
+                            ids[i],
+                          ),
+                          _ => null,
+                        },
                       ),
                     ],
                   ),
@@ -1486,7 +1534,16 @@ class _Banner extends StatelessWidget {
 /// Liste au style de la liste de gauche : une ligne par élément, son libellé
 /// à gauche et sa valeur à droite.
 class _LineList extends StatefulWidget {
-  const _LineList(this.lines, {super.key, this.sortable = false, this.forms});
+  const _LineList(
+    this.lines, {
+    super.key,
+    this.sortable = false,
+    this.forms,
+    this.onTap,
+  });
+
+  /// Si non nul : chaque ligne est cliquable (position dans [lines]).
+  final ValueChanged<int>? onTap;
 
   final List<(String, String)> lines;
 
@@ -1559,42 +1616,60 @@ class _LineListState extends State<_LineList> {
             ),
           ),
         for (final i in _order)
-          DecoratedBox(
-            decoration: BoxDecoration(border: Border(bottom: divider)),
-            child: Padding(
-              padding: _cellPadding,
-              child: Row(
-                spacing: 8,
-                children: [
-                  Expanded(
+          _detailRow(
+            onTap: switch (widget.onTap) {
+              final tap? => () => tap(i),
+              null => null,
+            },
+            child: Row(
+              spacing: 8,
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.lines[i].$1,
+                    style: _text,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (widget.forms case final forms?) ...[
+                  _Form(forms[i]),
+                  // Largeur fixe, comme dans la liste de gauche : les
+                  // valeurs restent alignées.
+                  SizedBox(
+                    width: _scoreWidth,
                     child: Text(
-                      widget.lines[i].$1,
+                      widget.lines[i].$2,
                       style: _text,
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
                     ),
                   ),
-                  if (widget.forms case final forms?) ...[
-                    _Form(forms[i]),
-                    // Largeur fixe, comme dans la liste de gauche : les
-                    // valeurs restent alignées.
-                    SizedBox(
-                      width: _scoreWidth,
-                      child: Text(
-                        widget.lines[i].$2,
-                        style: _text,
-                        textAlign: TextAlign.right,
-                      ),
-                    ),
-                  ] else
-                    Text(widget.lines[i].$2, style: _text),
-                ],
-              ),
+                ] else
+                  Text(widget.lines[i].$2, style: _text),
+              ],
             ),
           ),
       ],
     );
   }
+}
+
+/// Ligne d'une liste du détail, cliquable si [onTap] (avec le survol bombé),
+/// sous un filet.
+Widget _detailRow({required Widget child, VoidCallback? onTap}) {
+  const divider = BorderSide(color: dividerColor);
+  final content = Padding(padding: _cellPadding, child: child);
+  return Material(
+    color: Colors.transparent,
+    shape: const Border(bottom: divider),
+    child: onTap == null
+        ? content
+        : InkWell(
+            onTap: onTap,
+            hoverColor: Colors.transparent,
+            child: HoverBulge(child: content),
+          ),
+  );
 }
 
 /// Évolution d'un ELO : signée, à une décimale (virgule), en vert si elle
@@ -1840,7 +1915,15 @@ class _Broken extends StatelessWidget {
 enum _MatchSort { date, game, place }
 
 class _MatchupList extends StatefulWidget {
-  const _MatchupList(this.matchups, {super.key, this.showGame = true});
+  const _MatchupList(
+    this.matchups, {
+    super.key,
+    this.showGame = true,
+    this.onTap,
+  });
+
+  /// Si non nul : chaque partie est cliquable (position dans [matchups]).
+  final ValueChanged<int>? onTap;
 
   /// Affiche la colonne du jeu (inutile quand toutes les parties sont du
   /// même jeu).
@@ -1944,13 +2027,13 @@ class _MatchupListState extends State<_MatchupList> {
         ),
         // La date et le jeu à gauche du joueur 1, le lieu à droite du
         // joueur 2.
-        for (final m in [for (final i in _order(matchups)) matchups[i]])
-          DecoratedBox(
-            decoration: BoxDecoration(border: Border(bottom: divider)),
-            child: Padding(
-              padding: _cellPadding,
-              child: _MatchDetailLine(m, showGame: widget.showGame),
-            ),
+        for (final i in _order(matchups))
+          _detailRow(
+            onTap: switch (widget.onTap) {
+              final tap? => () => tap(i),
+              null => null,
+            },
+            child: _MatchDetailLine(matchups[i], showGame: widget.showGame),
           ),
       ],
     );

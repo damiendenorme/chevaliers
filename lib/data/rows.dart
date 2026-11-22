@@ -27,6 +27,10 @@ class RowTable {
     this.sessionDetails,
     this.sessionLines,
     this.partyIds,
+    this.rowIds,
+    this.listIds,
+    this.listTable = 'jeu',
+    this.matchListIds,
     this.summaries,
     this.banners,
     this.lists,
@@ -121,6 +125,21 @@ class RowTable {
   final List<String?>? summaries;
 
   int? partyId(int index) => partyIds?[index];
+
+  /// Id de chaque ligne de la liste (jeux, parties) : pour y arriver depuis
+  /// un autre onglet et la sélectionner.
+  final List<int>? rowIds;
+
+  /// Id du jeu de chaque élément de [lists], et de la partie de chaque
+  /// élément de [matchLists] (même ordre) : un clic y mène.
+  final List<List<int>>? listIds;
+  final List<List<int>>? matchListIds;
+
+  /// Table des éléments de [lists] : où mène un clic (« jeu » pour les jeux
+  /// d'un joueur, « joueur » pour le classement d'un jeu).
+  final String listTable;
+
+  int? rowId(int index) => rowIds?[index];
   String? summary(int index) => summaries?[index];
 
   /// Parties de JDR listées dans le détail de chaque ligne (pour un jeu) :
@@ -391,6 +410,7 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
       matchDetails: details,
       photos: [for (final (i, _) in recent) photosByGame[ids[i]] ?? const []],
       partyIds: [for (final (i, _) in recent) ids[i]],
+      rowIds: [for (final (i, _) in recent) ids[i]],
       summaries: [for (final (i, _) in recent) summaryOf[ids[i]]],
       columns: const ['Joueur 1', 'Score 1', 'Score 2', 'Joueur 2', 'Jeu'],
       rows: [
@@ -407,7 +427,7 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
   }
 
   if (table == 'joueur') {
-    final (players, boardGames, (:games, :places, :dates, ids: _)) = await (
+    final (players, boardGames, (:games, :places, :dates, :ids)) = await (
       db
           .from('${prefix}joueur')
           .select('id, nom')
@@ -454,11 +474,24 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
           ),
       ],
       lists: playerLists,
+      // Un clic sur un jeu ou une partie y mène.
+      listIds: [
+        for (final list in playerLists)
+          [for (final (name, _) in list) gameIds[name]!],
+      ],
+      matchListIds: [
+        for (final p in players)
+          [
+            for (final (i, g) in games.indexed.toList().reversed)
+              if (g.player1 == p['id'] || g.player2 == p['id']) ids[i],
+          ],
+      ],
       banners: [
         for (final p in players) bannerAsset('$prefix$table', p['id'] as int),
       ],
       forms: [for (final p in players) recentForm(games, p['id'] as int)],
       ids: [for (final p in players) p['id'] as int],
+      rowIds: [for (final p in players) p['id'] as int],
       // Sans partie : rien au Wargame ; au RPG, la Gloire de départ, 0.
       globalScores: [
         for (final p in players)
@@ -475,7 +508,7 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
   }
 
   if (table == 'jeu') {
-    final (boardGames, players, (:games, :places, :dates, ids: _)) = await (
+    final (boardGames, players, (:games, :places, :dates, :ids)) = await (
       db.from('${prefix}jeu').select('id, nom').order('nom', ascending: true),
       db
           .from('${prefix}joueur')
@@ -487,10 +520,25 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
     final playerNames = {
       for (final p in players) p['id'] as int: p['nom'] as String,
     };
+    final rowIds = [for (final j in boardGames) j['id'] as int];
     final gameNames = {
       for (final j in boardGames) j['id'] as int: j['nom'] as String,
     };
     return RowTable(
+      rowIds: rowIds,
+      // Un clic sur un joueur du classement ou une partie y mène.
+      listTable: 'joueur',
+      listIds: [
+        for (final j in boardGames)
+          rankedPlayers(elo[j['id'] as int] ?? const {}, playerNames),
+      ],
+      matchListIds: [
+        for (final j in boardGames)
+          [
+            for (final (i, g) in games.indexed.toList().reversed)
+              if (g.game == j['id']) ids[i],
+          ],
+      ],
       matchListShowsGame: false,
       // Sous le classement : les parties jouées à ce jeu.
       matchLists: [

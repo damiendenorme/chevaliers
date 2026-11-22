@@ -1857,6 +1857,217 @@ void main() {
     expect(find.text('MJ'), findsOneWidget);
   });
 
+  testWidgets('In a player detail, a game or party leads to it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final party = (
+      date: DateTime(2026, 11, 21),
+      matchup: (player1: 'Arthur', score1: 7, score2: 9, player2: 'Bors'),
+      game: 'Go',
+      place: 'Aumes',
+      eloDelta1: -4.0,
+      form1: const <Outcome>[],
+      form2: const <Outcome>[],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (table) async => switch (table) {
+            'joueur' => RowTable(
+              columns: const ['Nom'],
+              rows: const [
+                ['Arthur'],
+              ],
+              lists: const [
+                [('Go', '1050'), ('Échecs', '980')],
+              ],
+              listIds: const [
+                [5, 6],
+              ],
+              matchLists: [
+                [party],
+              ],
+              matchListIds: const [
+                [42],
+              ],
+            ),
+            'jeu' => const RowTable(
+              columns: ['Nom'],
+              rows: [
+                ['Échecs'],
+                ['Go'],
+              ],
+              rowIds: [6, 5],
+            ),
+            'partie' => RowTable(
+              columns: const ['Nom'],
+              rows: const [
+                ['Autre partie'],
+                ['La partie'],
+              ],
+              rowIds: const [41, 42],
+              matchDetails: [party, party],
+            ),
+            _ => const RowTable(columns: ['Nom'], rows: []),
+          },
+          loadCounts: () async =>
+              (players: 1, events: 0, games: 1, boardGames: 2),
+        ),
+      ),
+    );
+    await tester.pump();
+    Future<void> openPlayer() async {
+      await tester.tap(
+        find.descendant(
+          of: find.byType(SectionBar),
+          matching: find.text('Joueurs'),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.text('Arthur').first);
+      await tester.pump();
+    }
+
+    // Ligne choisie de la liste de gauche : son texte est en blanc.
+    bool selected(String text) =>
+        tester.widget<Text>(find.text(text).first).style?.color == Colors.white;
+
+    // Clic sur le jeu « Échecs » : l'onglet Jeux, « Échecs » sélectionné.
+    await openPlayer();
+    await tester.tap(find.text('Échecs'));
+    await tester.pump();
+    await tester.pump();
+    final jeux = find.descendant(
+      of: find.byType(SectionBar),
+      matching: find.text('Jeux'),
+    );
+    expect(
+      tester.widget<Text>(jeux).style?.color,
+      Colors.white, // libellé actif
+    );
+    expect(find.text('Sélectionnez un élément à gauche.'), findsNothing);
+    expect(selected('Échecs'), isTrue);
+    expect(selected('Go'), isFalse);
+
+    // Clic sur sa partie : l'onglet Parties, la partie 42 sélectionnée.
+    await openPlayer();
+    await tester.tap(find.text('Go').last);
+    await tester.pump();
+    await tester.pump();
+    final parties = find.descendant(
+      of: find.byType(SectionBar),
+      matching: find.text('Parties'),
+    );
+    expect(tester.widget<Text>(parties).style?.color, Colors.white);
+    expect(find.text('Sélectionnez un élément à gauche.'), findsNothing);
+    expect(selected('La partie'), isTrue);
+    expect(selected('Autre partie'), isFalse);
+  });
+
+  testWidgets('In a game detail, a ranked player or party leads to it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final party = (
+      date: DateTime(2026, 11, 21),
+      matchup: (player1: 'Arthur', score1: 7, score2: 9, player2: 'Bors'),
+      game: 'Go',
+      place: 'Aumes',
+      eloDelta1: -4.0,
+      form1: const <Outcome>[],
+      form2: const <Outcome>[],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (table) async => switch (table) {
+            'jeu' => RowTable(
+              columns: const ['Nom'],
+              rows: const [
+                ['Go'],
+              ],
+              rowIds: const [5],
+              listTable: 'joueur',
+              lists: const [
+                [('1. Bors', '1050'), ('2. Arthur', '950')],
+              ],
+              listIds: const [
+                [2, 1],
+              ],
+              matchLists: [
+                [party],
+              ],
+              matchListIds: const [
+                [42],
+              ],
+            ),
+            'joueur' => const RowTable(
+              columns: ['Nom'],
+              rows: [
+                ['Arthur'],
+                ['Bors'],
+              ],
+              rowIds: [1, 2],
+            ),
+            'partie' => RowTable(
+              columns: const ['Nom'],
+              rows: const [
+                ['Autre partie'],
+                ['La partie'],
+              ],
+              rowIds: const [41, 42],
+              matchDetails: [party, party],
+            ),
+            _ => const RowTable(columns: ['Nom'], rows: []),
+          },
+          loadCounts: () async =>
+              (players: 2, events: 0, games: 1, boardGames: 1),
+        ),
+      ),
+    );
+    await tester.pump();
+    Finder tab(String label) => find.descendant(
+      of: find.byType(SectionBar),
+      matching: find.text(label),
+    );
+    bool active(String label) =>
+        tester.widget<Text>(tab(label)).style?.color == Colors.white;
+    bool selected(String text) =>
+        tester.widget<Text>(find.text(text).first).style?.color == Colors.white;
+    Future<void> openGame() async {
+      await tester.tap(tab('Jeux'));
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.text('Go').first);
+      await tester.pump();
+    }
+
+    // Clic sur « 1. Bors » : l'onglet Joueurs, Bors sélectionné.
+    await openGame();
+    await tester.tap(find.text('1. Bors'));
+    await tester.pump();
+    await tester.pump();
+    expect(active('Joueurs'), isTrue);
+    expect(selected('Bors'), isTrue);
+    expect(selected('Arthur'), isFalse);
+
+    // Clic sur sa partie : l'onglet Parties, la partie 42 sélectionnée.
+    await openGame();
+    await tester.tap(find.text('Aumes'));
+    await tester.pump();
+    await tester.pump();
+    expect(active('Parties'), isTrue);
+    expect(selected('La partie'), isTrue);
+  });
+
   testWidgets('Hovering a button does not animate or resize it', (
     tester,
   ) async {
