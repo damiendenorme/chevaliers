@@ -15,18 +15,21 @@ typedef RpgSession = ({
   int? event,
 });
 
-/// Lignes d'une table JDR (préfixe rpg_), pour les parties, les joueurs et
-/// les jeux ; null pour les autres tables (lues comme au Wargame).
+/// Lignes d'une table JDR (préfixe rpg_), pour les parties, les joueurs, les
+/// jeux et les événements ; null pour les autres tables (lues comme au
+/// Wargame).
 ///
 /// Pas de score au JDR : la Gloire des joueurs reste à son départ (0), sans
 /// pastilles de résultats.
 Future<RowTable?> fetchRpgSessionRows(String table) async {
-  if (table != 'partie' && table != 'joueur' && table != 'jeu') return null;
+  if (!const {'partie', 'joueur', 'jeu', 'evenement'}.contains(table)) {
+    return null;
+  }
   final db = Supabase.instance.client;
   final (players, games, events, sessionRows) = await (
     db.from('rpg_joueur').select('id, nom'),
     db.from('rpg_jeu').select('id, nom'),
-    db.from('rpg_evenement').select('id, nom'),
+    db.from('rpg_evenement').select('id, nom, date'),
     db
         .from('rpg_partie')
         .select(
@@ -98,6 +101,18 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
         // La bannière d'une partie est celle de son jeu.
         banners: [for (final s in sessions) bannerAsset('rpg_jeu', s.game)],
         photos: [for (final s in sessions) photos[s.id] ?? const []],
+        sessionDetails: [
+          for (final s in sessions)
+            (
+              date: s.date,
+              game: gameNames[s.game] ?? '—',
+              place: s.place,
+              event: s.event == null ? null : eventNames[s.event],
+              gm: s.gm == null ? null : (s.gm!, nameOf(s.gm)),
+              guests: [for (final g in s.guests) (g, nameOf(g))]
+                ..sort((a, b) => compareNames(a.$2, b.$2)),
+            ),
+        ],
       );
     case 'joueur':
       final sorted = [...players]
@@ -123,6 +138,35 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
                 if (s.gm == p['id'] || s.guests.contains(p['id']))
                   (label(s), s.gm == p['id'] ? 'MJ' : 'Invité'),
             ],
+        ],
+      );
+    case 'evenement':
+      final sorted = [...events]
+        ..sort((a, b) => compareNames(a['nom'] as String, b['nom'] as String));
+      return RowTable(
+        // Pas de date dans le détail : seulement dans la liste.
+        columns: const ['Nom'],
+        rows: [
+          for (final e in sorted) [e['nom'] as String],
+        ],
+        dates: [
+          for (final e in sorted)
+            if (e['date'] case final String d) DateTime.parse(d) else null,
+        ],
+        banners: [
+          for (final e in sorted) bannerAsset('rpg_evenement', e['id'] as int),
+        ],
+        // Les joueurs ayant joué au moins une fois à l'événement (MJ ou
+        // invités), par nom.
+        playerBanners: [
+          for (final e in sorted)
+            ([
+              for (final id in {
+                for (final s in sessions)
+                  if (s.event == e['id']) ...[?s.gm, ...s.guests],
+              })
+                (id, nameOf(id)),
+            ]..sort((a, b) => compareNames(a.$2, b.$2))),
         ],
       );
     default: // jeu

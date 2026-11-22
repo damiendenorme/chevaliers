@@ -22,6 +22,8 @@ class RowTable {
     this.matchListShowsGame = true,
     this.dates,
     this.fullDates = false,
+    this.playerBanners,
+    this.sessionDetails,
     this.banners,
     this.lists,
     this.sortableLists = false,
@@ -96,6 +98,19 @@ class RowTable {
   final List<DateTime?>? dates;
 
   DateTime? date(int index) => dates?[index];
+
+  /// Joueurs (id, nom) affichés dans le détail de chaque ligne, avec la
+  /// bannière de leur id (événements JDR : ceux qui y ont joué).
+  final List<List<(int, String)>>? playerBanners;
+
+  List<(int, String)> playerBannersOf(int index) =>
+      playerBanners?[index] ?? const [];
+
+  /// Pour les parties de JDR : chaque ligne est une partie, affichée dans le
+  /// détail à la manière d'une partie de Wargame, à la place de ses colonnes.
+  final List<SessionDetail>? sessionDetails;
+
+  SessionDetail? sessionDetail(int index) => sessionDetails?[index];
 
   /// Dates affichées en entier (jour, mois, année) au lieu du mois et de
   /// l'année (parties de JDR).
@@ -206,6 +221,17 @@ List<MatchDetail> _matchDetails({
         ),
   ];
 }
+
+/// Une partie de JDR détaillée : sa date, son jeu, son lieu et son
+/// événement (facultatifs), son MJ et ses invités (id, nom).
+typedef SessionDetail = ({
+  DateTime date,
+  String game,
+  String? place,
+  String? event,
+  (int, String)? gm,
+  List<(int, String)> guests,
+});
 
 /// Chemin d'asset de la bannière d'une ligne, sans extension :
 /// `assets/bannieres/<table>/<id>`. Le fichier peut être en .jpg, .jpeg ou

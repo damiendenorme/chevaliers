@@ -363,7 +363,7 @@ void main() {
     expect(firstValue.center.dy, first.center.dy);
     expect(firstValue.left, greaterThanOrEqualTo(first.right));
     expect(firstValue.right, tester.getRect(find.byType(RowList)).right - 12);
-    expect(second.top - first.top, master.height + 8);
+    expect(second.top - first.top, master.height + 9);
     // « Nom » : seulement dans l'en-tête de la liste, pas dans le détail.
     expect(find.text('Nom'), findsOneWidget);
     expect(
@@ -1393,6 +1393,105 @@ void main() {
     expect((p.game, p.gm, p.place, p.event), (4, 1, null, 6));
     expect(p.guests..sort(), [2, 3]);
     expect(p.date, DateUtils.dateOnly(DateTime.now()));
+  });
+
+  testWidgets('An RPG event detail lists its players with their banners', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRpgRows: (_) async => RowTable(
+            columns: const ['Nom'],
+            rows: const [
+              ['Trench Crusade'],
+            ],
+            dates: [DateTime(2027, 12)],
+            playerBanners: const [
+              [(2, 'Irongab'), (6, 'Andracifus')],
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('RPG'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Trench Crusade'));
+    await tester.pumpAndSettle();
+
+    // Pas de date dans le détail (seulement dans la liste) ; les joueurs.
+    expect(find.text('Décembre 2027'), findsOneWidget);
+    expect(find.text('Date'), findsOneWidget); // l'en-tête de la liste
+    // Seulement les bannières, sans les noms.
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('6'), findsOneWidget);
+    expect(find.text('Irongab'), findsNothing);
+    expect(find.text('Andracifus'), findsNothing);
+    expect(
+      tester.getRect(find.text('6')).left,
+      greaterThan(tester.getRect(find.text('2')).right),
+    );
+  });
+
+  testWidgets('An RPG party detail centers the GM, guests below', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRpgRows: (_) async => RowTable(
+            columns: const ['Jeu'],
+            rows: const [
+              ['Pendragon'],
+            ],
+            dates: [DateTime(2026, 11, 21)],
+            fullDates: true,
+            sessionDetails: [
+              (
+                date: DateTime(2026, 11, 21),
+                game: 'Pendragon',
+                place: 'Aumes',
+                event: null,
+                gm: (1, 'Merlin'),
+                guests: [(2, 'Morgane'), (3, 'Perceval')],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('RPG'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pendragon'));
+    await tester.pumpAndSettle();
+
+    final card = tester.getRect(find.byType(RowList));
+    final detailCenter =
+        (card.left + RowList.listWidth + RowList.gap + card.right) / 2;
+    final gm = tester.getRect(find.text('1'));
+    final guest2 = tester.getRect(find.text('2'));
+    final guest3 = tester.getRect(find.text('3'));
+    final place = tester.getRect(find.text('Aumes'));
+    // Date, jeu et lieu au-dessus ; le MJ centré ; les invités dessous,
+    // centrés ensemble.
+    expect(find.text('21/11/2026'), findsNWidgets(2)); // liste et détail
+    expect(gm.top, greaterThan(place.bottom));
+    expect(gm.center.dx, moreOrLessEquals(detailCenter, epsilon: 1));
+    expect(guest2.top, greaterThan(gm.bottom));
+    expect(guest3.center.dy, guest2.center.dy);
+    expect(
+      (guest2.left + guest3.right) / 2,
+      moreOrLessEquals(detailCenter, epsilon: 2),
+    );
+    expect(find.text('Merlin'), findsNothing);
   });
 
   testWidgets('Hovering a button does not animate or resize it', (

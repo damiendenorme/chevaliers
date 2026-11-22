@@ -156,7 +156,9 @@ const double _scoreWidth = 44;
 
 /// Largeur de la colonne des ids (bannières), tout à droite de la liste.
 const double _idColumnWidth = 34;
-const _cellPadding = EdgeInsets.symmetric(horizontal: 12, vertical: 4);
+
+/// Marges des éléments de liste : 1px de hauteur de plus qu'au départ.
+const _cellPadding = EdgeInsets.symmetric(horizontal: 12, vertical: 4.5);
 
 class _MasterDetail extends StatefulWidget {
   const _MasterDetail(this.table);
@@ -394,8 +396,17 @@ class _MasterDetailState extends State<_MasterDetail> {
                           ),
                           child: _MatchDetailLine(m, stacked: true),
                         )
+                      else if (table.sessionDetail(_selected!) case final s?)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 16,
+                          ),
+                          child: _SessionDetail(s),
+                        )
                       else
                         _Detail(table.entries(_selected!)),
+                      _PlayerBanners(table.playerBannersOf(_selected!)),
                       // Une clé par ligne : le tri repart de zéro à chaque
                       // changement de ligne.
                       _LineList(
@@ -709,18 +720,108 @@ class _SortHeader extends StatelessWidget {
   }
 }
 
+/// Une partie de JDR, à la manière d'une partie de Wargame : la date, le jeu,
+/// le lieu et l'événement l'un sous l'autre, centrés et plus petits ; puis,
+/// centrées, la bannière du MJ, et dessous celles des invités. Le nom de
+/// chacun s'affiche au survol de sa bannière.
+class _SessionDetail extends StatelessWidget {
+  const _SessionDetail(this.s);
+
+  final SessionDetail s;
+
+  @override
+  Widget build(BuildContext context) {
+    final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    Widget banner((int, String) player) => Tooltip(
+      message: player.$2,
+      child: _IdBanner(player.$1, scale: _IdBanner.detailScale),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 4,
+      children: [
+        // Un peu plus bas sous la bannière, comme une partie de Wargame.
+        const SizedBox(height: 20),
+        for (final info in [formatFullDate(s.date), s.game, ?s.place, ?s.event])
+          Text(
+            info,
+            style: _text.copyWith(fontSize: 12, color: labelColor),
+            textAlign: TextAlign.center,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+          ),
+        const SizedBox(height: 28),
+        // Le MJ, puis ses invités.
+        if (s.gm case final gm?) Center(child: banner(gm)),
+        const SizedBox(height: 8),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
+          children: [for (final g in s.guests) banner(g)],
+        ),
+      ],
+    );
+  }
+}
+
+/// Joueurs, chacun représenté par la bannière de son id, à la suite sous un
+/// petit titre. Rien si la liste est vide.
+class _PlayerBanners extends StatelessWidget {
+  const _PlayerBanners(this.players);
+
+  final List<(int, String)> players;
+
+  @override
+  Widget build(BuildContext context) {
+    if (players.isEmpty) return const SizedBox.shrink();
+    final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 8,
+        children: [
+          Text(
+            'Joueurs',
+            style: _text.copyWith(fontSize: 12, color: labelColor),
+          ),
+          // Seulement les bannières (le nom reste lisible au survol).
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final (id, name) in players)
+                Tooltip(
+                  message: name,
+                  child: _IdBanner(id, scale: _IdBanner.detailScale),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Petite bannière héraldique, au fond texturé des boutons activés, avec un
 /// id en blanc : un rectangle dont le bas est échancré en queue d'aronde.
 class _IdBanner extends StatelessWidget {
-  const _IdBanner(this.id, {this.flat = false});
+  const _IdBanner(this.id, {this.flat = false, this.scale = 1});
 
   final int id;
 
   /// Texture atténuée (voir [AccentStyle.flatTexture]).
   final bool flat;
 
+  /// Agrandissement (1 : la taille des listes).
+  final double scale;
+
+  /// Agrandissement des bannières dans les détails.
+  static const double detailScale = 1.8;
+
   static const double width = 24;
-  static const double height = 20;
+  static const double height = 21;
 
   /// Profondeur de l'échancrure du bas.
   static const double notch = 5;
@@ -729,22 +830,23 @@ class _IdBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = AccentStyle.of(context);
     // Bordure de la couleur des éléments choisis, qui suit la forme.
+    final notch = _IdBanner.notch * scale;
     return CustomPaint(
       foregroundPainter: _BannerBorderPainter(notch, accent.border),
       child: ClipPath(
-        clipper: const _BannerClipper(notch),
+        clipper: _BannerClipper(notch),
         child: Container(
-          width: width,
-          height: height,
-          padding: const EdgeInsets.only(bottom: notch - 1),
+          width: width * scale,
+          height: height * scale,
+          padding: EdgeInsets.only(bottom: notch - 1),
           alignment: Alignment.center,
           // Le fond texturé des boutons activés (couleur de la page), ou sa
           // version plus plate.
           decoration: flat ? accent.flatTexture : accent.texture,
           child: Text(
             '$id',
-            style: const TextStyle(
-              fontSize: 10,
+            style: TextStyle(
+              fontSize: 10 * scale,
               height: 1,
               fontWeight: FontWeight.bold,
               color: Colors.white,
