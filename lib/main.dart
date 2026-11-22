@@ -288,7 +288,7 @@ class _GamePageState extends State<GamePage> {
       children: [
         Positioned.fill(
           child: SafeArea(
-            // Colonne de 1000px centrée : boutons centrés en haut, tableaux
+            // Colonne centrée (RowList.width) : boutons centrés en haut, tableaux
             // dessous, chacun toujours au même emplacement.
             child: Align(
               alignment: Alignment.topCenter,

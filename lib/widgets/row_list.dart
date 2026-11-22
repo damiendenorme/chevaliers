@@ -15,10 +15,10 @@ import 'top_bar.dart';
 class RowList extends StatelessWidget {
   const RowList({super.key, required this.rows});
 
-  static const double width = 1000;
+  static const double width = 1100;
 
   /// Largeur de la carte de la liste, à gauche.
-  static const double listWidth = 300;
+  static const double listWidth = 400;
 
   /// Écart entre la carte de la liste et celle du détail.
   static const double gap = 12;

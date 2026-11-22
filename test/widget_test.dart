@@ -107,7 +107,7 @@ void main() {
   });
 
   testWidgets('Clicking a button lists the rows of its table', (tester) async {
-    // Écran plus large que le tableau (1000px).
+    // Écran plus large que le tableau (RowList.width).
     tester.view.physicalSize = const Size(1400, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -179,9 +179,9 @@ void main() {
     expect(find.text('Arthur'), findsOneWidget);
     expect(find.text('Lancelot'), findsOneWidget);
     expect(find.text('Jeu favori'), findsNothing);
-    // Zone de 1000px, centrée horizontalement.
+    // Zone de RowList.width, centrée horizontalement.
     final playersTable = tester.getRect(find.byType(RowList));
-    expect(playersTable.width, 1000);
+    expect(playersTable.width, RowList.width);
     expect(playersTable.center.dx, moreOrLessEquals(1400 / 2));
     expect(tester.getRect(find.text('Arthur')).left, playersTable.left + 12);
 
