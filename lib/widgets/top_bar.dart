@@ -11,11 +11,13 @@ const edgeColor = Color(0xFF5A4630);
 /// sombre des cartes.
 const dividerColor = Color(0xFF3A3532);
 
-/// Couleur des éléments actifs : bleu, avec le texte en blanc.
-const accentColor = Color(0xFF2F6FDB);
+/// Couleur des éléments actifs : marron sombre, comme le bois de l'image de
+/// fond, avec le texte en blanc.
+const accentColor = Color(0xFF5C3A1E);
 
-/// Couleur des survols : bleu sombre, pour garder le texte clair lisible.
-const hoverColor = Color(0xFF26364F);
+/// Couleur des survols : brun, dans les tons de l'accent mais plus discret,
+/// pour garder le texte clair lisible.
+const hoverColor = Color(0xFF3D2A1A);
 
 /// Légère ombre portée des boutons et des cartes.
 const lightShadow = [
