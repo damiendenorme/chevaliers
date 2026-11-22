@@ -5,10 +5,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'data/auth.dart';
 import 'data/rows.dart';
+import 'data/rpg_rows.dart';
 import 'supabase_config.dart';
 import 'widgets/login.dart';
 import 'widgets/name_dialog.dart';
 import 'widgets/party_dialog.dart';
+import 'widgets/rpg_party_dialog.dart';
 import 'widgets/row_list.dart';
 import 'widgets/section_buttons.dart';
 import 'widgets/top_bar.dart';
@@ -73,7 +75,10 @@ class MyApp extends StatelessWidget {
 }
 
 /// Données RPG : mêmes tables que le Wargame, préfixées par rpg_.
-Future<RowTable> fetchRpgRows(String table) => fetchRows(table, prefix: 'rpg_');
+/// Parties, joueurs et jeux du JDR : construits à partir des parties de JDR
+/// (jeu, MJ, invités) ; le reste comme au Wargame.
+Future<RowTable> fetchRpgRows(String table) async =>
+    await fetchRpgSessionRows(table) ?? await fetchRows(table, prefix: 'rpg_');
 Future<Counts> fetchRpgCounts() => fetchCounts(prefix: 'rpg_');
 Future<void> addRpgPlayer(String name) => addPlayer(name, prefix: 'rpg_');
 Future<void> addRpgEvent(String name, DateTime? date) =>
@@ -99,7 +104,14 @@ class MyHomePage extends StatefulWidget {
     this.saveRpgGame = addRpgGame,
     this.saveParty = addParty,
     this.loadPartyOptions = fetchPartyOptions,
+    this.saveRpgParty = addRpgParty,
+    this.loadRpgPartyOptions = fetchRpgPartyOptions,
   });
+
+  /// Ajout d'une partie de JDR (backoffice) : l'enregistrement et les
+  /// choix proposés.
+  final Future<void> Function(NewRpgParty party) saveRpgParty;
+  final Future<RpgPartyOptions> Function() loadRpgPartyOptions;
 
   /// Ajout d'une partie (backoffice), au Wargame seulement : l'enregistrement
   /// et les joueurs et jeux proposés.
@@ -202,6 +214,8 @@ class _MyHomePageState extends State<MyHomePage> {
                       addPlayer: widget.saveRpgPlayer,
                       addEvent: widget.saveRpgEvent,
                       addGame: widget.saveRpgGame,
+                      addRpgParty: widget.saveRpgParty,
+                      loadRpgPartyOptions: widget.loadRpgPartyOptions,
                     ),
                   ),
                 ],
@@ -305,7 +319,13 @@ class GamePage extends StatefulWidget {
     required this.addGame,
     this.addParty,
     this.loadPartyOptions,
+    this.addRpgParty,
+    this.loadRpgPartyOptions,
   });
+
+  /// Ajout d'une partie de JDR et ses choix ; null : pas sur cette page.
+  final Future<void> Function(NewRpgParty party)? addRpgParty;
+  final Future<RpgPartyOptions> Function()? loadRpgPartyOptions;
 
   /// Ajout d'une partie et ses choix (joueurs, jeux) ; null : pas d'ajout
   /// de partie sur cette page.
@@ -360,7 +380,7 @@ class _GamePageState extends State<GamePage> {
   late final Stream<bool> _signedIn = widget.auth.signedIn;
 
   /// Bouton « + » de la section affichée : joueurs et jeux (nom), événements
-  /// (nom et date), parties (si la page le permet).
+  /// (nom et date), parties (Wargame ou JDR selon la page).
   VoidCallback? get _adder => switch (_active) {
     0 => () => _add(
       title: 'Nouveau joueur',
@@ -372,6 +392,7 @@ class _GamePageState extends State<GamePage> {
       save: widget.addEvent,
     ),
     2 when widget.addParty != null => _addParty,
+    2 when widget.addRpgParty != null => _addRpgParty,
     3 => () => _add(
       title: 'Nouveau jeu',
       save: (name, _) => widget.addGame(name),
@@ -388,6 +409,21 @@ class _GamePageState extends State<GamePage> {
         options: widget.loadPartyOptions!(),
         onSubmit: (party) async {
           await widget.addParty!(party);
+          _reload();
+        },
+      ),
+    ),
+  );
+
+  /// Demande la partie de JDR, l'enregistre, puis recharge.
+  Future<void> _addRpgParty() => showDialog<void>(
+    context: context,
+    builder: (_) => AccentScope(
+      style: AccentStyle.of(context),
+      child: RpgPartyDialog(
+        options: widget.loadRpgPartyOptions!(),
+        onSubmit: (party) async {
+          await widget.addRpgParty!(party);
           _reload();
         },
       ),

@@ -21,6 +21,7 @@ class RowTable {
     this.photos,
     this.matchListShowsGame = true,
     this.dates,
+    this.fullDates = false,
     this.banners,
     this.lists,
     this.sortableLists = false,
@@ -95,6 +96,10 @@ class RowTable {
   final List<DateTime?>? dates;
 
   DateTime? date(int index) => dates?[index];
+
+  /// Dates affichées en entier (jour, mois, année) au lieu du mois et de
+  /// l'année (parties de JDR).
+  final bool fullDates;
 
   /// Chemin d'asset de l'image de bannière de chaque ligne, sans extension
   /// (voir [bannerAsset]). Le fichier peut ne pas exister.
@@ -688,3 +693,10 @@ Future<void> addParty(NewParty party, {String prefix = ''}) =>
           .toUtc()
           .toIso8601String(),
     });
+
+/// Date complète, jour, mois et année : « 21/11/2026 ».
+String formatFullDate(DateTime date) {
+  final d = date.toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(d.day)}/${two(d.month)}/${d.year}';
+}

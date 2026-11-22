@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chevaliers/data/auth.dart';
 import 'package:chevaliers/data/rows.dart';
+import 'package:chevaliers/data/rpg_rows.dart';
 import 'package:chevaliers/main.dart';
 import 'package:chevaliers/widgets/row_list.dart';
 import 'package:chevaliers/widgets/section_buttons.dart';
@@ -1160,10 +1161,10 @@ void main() {
     expect(players, ['Arthur', 'Lancelot']);
     expect(find.text('Merlin'), findsOneWidget);
 
-    // Au RPG, pas d'ajout de partie.
+    // Au RPG aussi, ajout de partie (de JDR).
     await tester.tap(find.text('Parties'));
     await tester.pump();
-    expect(find.byType(AddButton), findsNothing);
+    expect(find.byType(AddButton), findsOneWidget);
   });
 
   testWidgets('Signed in, a + button adds an event with an optional date', (
@@ -1318,6 +1319,80 @@ void main() {
       (p.player1, p.player2, p.score1, p.score2, p.game, p.place, p.date),
       (1, 2, 3, 2, 5, 9, null),
     );
+  });
+
+  testWidgets('Signed in, a + button adds an RPG party (GM, guests)', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final parties = <NewRpgParty>[];
+    final auth = FakeAuth();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRpgRows: (_) async => const RowTable(columns: ['Nom'], rows: []),
+          loadRpgCounts: () async =>
+              (players: 3, events: 1, games: parties.length, boardGames: 1),
+          auth: auth,
+          loadRpgPartyOptions: () async => (
+            players: [(1, 'Merlin'), (2, 'Morgane'), (3, 'Perceval')],
+            games: [(4, 'Pendragon')],
+            places: [(8, 'Aumes')],
+            events: [(6, 'Trench Crusade')],
+          ),
+          saveRpgParty: (party) async => parties.add(party),
+        ),
+      ),
+    );
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+    await tester.tap(find.text('RPG'));
+    await tester.pumpAndSettle();
+
+    // Section de départ : les parties ; le bouton ouvre la partie de JDR.
+    await tester.tap(find.byType(AddButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Nouvelle partie'), findsOneWidget);
+    expect(find.text('Joueurs invités'), findsOneWidget);
+    // Date complète, aujourd'hui par défaut.
+    expect(
+      find.text('Date : ${formatFullDate(DateTime.now())}'),
+      findsOneWidget,
+    );
+
+    // Sans jeu ni MJ : refus.
+    await tester.tap(find.text('Ajouter'));
+    await tester.pump();
+    expect(find.text('Choisissez le jeu.'), findsOneWidget);
+
+    Future<void> choose(String label, String item) async {
+      await tester.tap(
+        find.widgetWithText(DropdownButtonFormField<int?>, label),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(item).last);
+      await tester.pumpAndSettle();
+    }
+
+    await choose('Jeu', 'Pendragon');
+    await choose('MJ', 'Merlin');
+    // Le MJ n'est pas proposé parmi les invités.
+    expect(find.widgetWithText(FilterChip, 'Merlin'), findsNothing);
+    await tester.tap(find.widgetWithText(FilterChip, 'Morgane'));
+    await tester.tap(find.widgetWithText(FilterChip, 'Perceval'));
+    await tester.pump();
+    await choose('Événement (facultatif)', 'Trench Crusade');
+    await tester.tap(find.text('Ajouter'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nouvelle partie'), findsNothing);
+    final p = parties.single;
+    expect((p.game, p.gm, p.place, p.event), (4, 1, null, 6));
+    expect(p.guests..sort(), [2, 3]);
+    expect(p.date, DateUtils.dateOnly(DateTime.now()));
   });
 
   testWidgets('Hovering a button does not animate or resize it', (
