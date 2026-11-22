@@ -77,6 +77,7 @@ Future<Counts> fetchRpgCounts() => fetchCounts(prefix: 'rpg_');
 Future<void> addRpgPlayer(String name) => addPlayer(name, prefix: 'rpg_');
 Future<void> addRpgEvent(String name, DateTime? date) =>
     addEvent(name, date, prefix: 'rpg_');
+Future<void> addRpgGame(String name) => addGame(name, prefix: 'rpg_');
 
 /// L'écran : le fond, les marque-pages Wargame et RPG à gauche, Discord en
 /// haut à droite, et la page du marque-page choisi. Chaque page a ses
@@ -93,7 +94,13 @@ class MyHomePage extends StatefulWidget {
     this.saveRpgPlayer = addRpgPlayer,
     this.saveEvent = addEvent,
     this.saveRpgEvent = addRpgEvent,
+    this.saveGame = addGame,
+    this.saveRpgGame = addRpgGame,
   });
+
+  /// Ajout d'un jeu (backoffice), au Wargame et au RPG.
+  final Future<void> Function(String name) saveGame;
+  final Future<void> Function(String name) saveRpgGame;
 
   /// Ajout d'un joueur (backoffice), au Wargame et au RPG.
   final Future<void> Function(String name) savePlayer;
@@ -172,6 +179,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       auth: widget.auth,
                       addPlayer: widget.savePlayer,
                       addEvent: widget.saveEvent,
+                      addGame: widget.saveGame,
                     ),
                   ),
                   // RPG : accentuation bronze.
@@ -183,6 +191,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       auth: widget.auth,
                       addPlayer: widget.saveRpgPlayer,
                       addEvent: widget.saveRpgEvent,
+                      addGame: widget.saveRpgGame,
                     ),
                   ),
                 ],
@@ -283,7 +292,11 @@ class GamePage extends StatefulWidget {
     required this.auth,
     required this.addPlayer,
     required this.addEvent,
+    required this.addGame,
   });
+
+  /// Ajout d'un jeu dans les données de la page.
+  final Future<void> Function(String name) addGame;
 
   /// Ajout d'un événement dans les données de la page.
   final Future<void> Function(String name, DateTime? date) addEvent;
@@ -329,8 +342,8 @@ class _GamePageState extends State<GamePage> {
 
   late final Stream<bool> _signedIn = widget.auth.signedIn;
 
-  /// Bouton « + » de la section affichée : joueurs (nom) ou événements (nom
-  /// et date) ; aucun ailleurs.
+  /// Bouton « + » de la section affichée : joueurs et jeux (nom), événements
+  /// (nom et date) ; aucun sur les parties.
   VoidCallback? get _adder => switch (_active) {
     0 => () => _add(
       title: 'Nouveau joueur',
@@ -340,6 +353,10 @@ class _GamePageState extends State<GamePage> {
       title: 'Nouvel événement',
       askDate: true,
       save: widget.addEvent,
+    ),
+    3 => () => _add(
+      title: 'Nouveau jeu',
+      save: (name, _) => widget.addGame(name),
     ),
     _ => null,
   };
@@ -417,8 +434,8 @@ class _GamePageState extends State<GamePage> {
                       ),
                       const SizedBox(height: _tableGap),
                       Expanded(
-                        // Connecté, sur les joueurs ou les événements : bouton
-                        // « + ».
+                        // Connecté, sur les joueurs, les événements ou les
+                        // jeux : bouton « + ».
                         child: StreamBuilder<bool>(
                           stream: _signedIn,
                           initialData: false,

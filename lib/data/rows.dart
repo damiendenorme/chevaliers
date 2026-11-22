@@ -633,3 +633,8 @@ Future<void> addEvent(String name, DateTime? date, {String prefix = ''}) {
         : '${date.year}-${two(date.month)}-${two(date.day)}'),
   });
 }
+
+/// Ajoute un jeu nommé [name] (backoffice : réservé aux connectés).
+/// [prefix] : préfixe des tables (voir [fetchRows]).
+Future<void> addGame(String name, {String prefix = ''}) =>
+    Supabase.instance.client.from('${prefix}jeu').insert({'nom': name});

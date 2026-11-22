@@ -1129,8 +1129,8 @@ void main() {
     await tester.pump();
     expect(find.byType(AddButton), findsOneWidget);
 
-    // Seulement sur la liste des joueurs.
-    await tester.tap(find.text('Jeux'));
+    // Pas sur la liste des parties.
+    await tester.tap(find.text('Parties'));
     await tester.pump();
     expect(find.byType(AddButton), findsNothing);
     await tester.tap(joueurs);
@@ -1204,6 +1204,49 @@ void main() {
     await tester.pumpAndSettle();
     expect(events, [('Tournoi de Noël', null)]);
     expect(find.text('Tournoi de Noël'), findsOneWidget);
+  });
+
+  testWidgets('Signed in, a + button adds a game; none on parties', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final games = <String>[];
+    final auth = FakeAuth();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => RowTable(
+            columns: const ['Nom'],
+            rows: [
+              for (final g in games) [g],
+            ],
+          ),
+          loadCounts: () async =>
+              (players: 0, events: 0, games: 0, boardGames: games.length),
+          auth: auth,
+          saveGame: (name) async => games.add(name),
+        ),
+      ),
+    );
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+    // Sur les parties (section de départ) : pas de bouton.
+    expect(find.byType(AddButton), findsNothing);
+
+    await tester.tap(find.text('Jeux'));
+    await tester.pump();
+    await tester.tap(find.byType(AddButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Nouveau jeu'), findsOneWidget);
+    expect(find.text('Choisir'), findsNothing);
+    await tester.enterText(find.byType(TextField), 'Mordheim');
+    await tester.tap(find.text('Ajouter'));
+    await tester.pumpAndSettle();
+    expect(games, ['Mordheim']);
+    expect(find.text('Mordheim'), findsOneWidget);
   });
 
   testWidgets('Hovering a button does not animate or resize it', (
