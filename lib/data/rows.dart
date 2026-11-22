@@ -143,6 +143,39 @@ typedef MatchDetail = ({
   List<Outcome> form2,
 });
 
+/// Parties détaillées (voir [MatchDetail]), de la plus récente à la plus
+/// ancienne : toutes, ou seulement celles qui vérifient [where]. [games],
+/// [places] et [dates] sont dans l'ordre chronologique.
+List<MatchDetail> _matchDetails({
+  required List<EloGame> games,
+  required List<String?> places,
+  required List<DateTime> dates,
+  required Map<int, String> playerNames,
+  required Map<int, String> gameNames,
+  bool Function(EloGame game)? where,
+}) {
+  final deltas = eloDeltas(games);
+  final forms = {for (final id in playerNames.keys) id: recentForm(games, id)};
+  return [
+    for (final (i, g) in games.indexed.toList().reversed)
+      if (where?.call(g) ?? true)
+        (
+          date: dates[i],
+          matchup: (
+            player1: playerNames[g.player1]!,
+            score1: g.score1,
+            score2: g.score2,
+            player2: playerNames[g.player2]!,
+          ),
+          game: gameNames[g.game]!,
+          place: places[i],
+          eloDelta1: deltas[i],
+          form1: forms[g.player1]!,
+          form2: forms[g.player2]!,
+        ),
+  ];
+}
+
 /// Chemin d'asset de la bannière d'une ligne : `assets/bannieres/<table>/<id>.jpg`.
 String bannerAsset(String table, int id) => 'assets/bannieres/$table/$id.jpg';
 
@@ -187,7 +220,8 @@ _fetchGames(SupabaseClient db) async {
 /// Pour `partie` : les deux joueurs, leurs scores et le jeu.
 /// Pour `joueur` : le nom, son ELO à chaque jeu auquel il a joué et ses
 /// parties.
-/// Pour `jeu` : le nom et le classement ELO des joueurs qui y ont joué.
+/// Pour `jeu` : le nom, le classement ELO des joueurs qui y ont joué et ses
+/// parties.
 /// Pour les autres tables : le nom.
 Future<RowTable> fetchRows(String table) async {
   final db = Supabase.instance.client;
@@ -221,30 +255,15 @@ Future<RowTable> fetchRows(String table) async {
     final gameNames = {
       for (final j in boardGames) j['id'] as int: j['nom'] as String,
     };
-    final deltas = eloDeltas(games);
-    final forms = {
-      for (final p in players)
-        p['id'] as int: recentForm(games, p['id'] as int),
-    };
-    // De la plus récente à la plus ancienne.
+    final details = _matchDetails(
+      games: games,
+      places: places,
+      dates: dates,
+      playerNames: playerNames,
+      gameNames: gameNames,
+    );
+    // Mêmes positions que [details] : de la plus récente à la plus ancienne.
     final recent = games.indexed.toList().reversed.toList();
-    final details = [
-      for (final (i, g) in recent)
-        (
-          date: dates[i],
-          matchup: (
-            player1: playerNames[g.player1]!,
-            score1: g.score1,
-            score2: g.score2,
-            player2: playerNames[g.player2]!,
-          ),
-          game: gameNames[g.game]!,
-          place: places[i],
-          eloDelta1: deltas[i],
-          form1: forms[g.player1]!,
-          form2: forms[g.player2]!,
-        ),
-    ];
     return RowTable(
       // La bannière d'une partie est celle du jeu joué.
       banners: [for (final (_, g) in recent) bannerAsset('jeu', g.game)],
@@ -272,11 +291,6 @@ Future<RowTable> fetchRows(String table) async {
       _fetchGames(db),
     ).wait;
     final elo = computeElo(games);
-    final deltas = eloDeltas(games);
-    final forms = {
-      for (final p in players)
-        p['id'] as int: recentForm(games, p['id'] as int),
-    };
     final gameNames = {
       for (final j in boardGames) j['id'] as int: j['nom'] as String,
     };
@@ -304,24 +318,14 @@ Future<RowTable> fetchRows(String table) async {
       ],
       matchLists: [
         for (final p in players)
-          [
-            for (final (i, g) in games.indexed.toList().reversed)
-              if (g.player1 == p['id'] || g.player2 == p['id'])
-                (
-                  date: dates[i],
-                  matchup: (
-                    player1: playerNames[g.player1]!,
-                    score1: g.score1,
-                    score2: g.score2,
-                    player2: playerNames[g.player2]!,
-                  ),
-                  game: gameNames[g.game]!,
-                  place: places[i],
-                  eloDelta1: deltas[i],
-                  form1: forms[g.player1]!,
-                  form2: forms[g.player2]!,
-                ),
-          ],
+          _matchDetails(
+            games: games,
+            places: places,
+            dates: dates,
+            playerNames: playerNames,
+            gameNames: gameNames,
+            where: (g) => g.player1 == p['id'] || g.player2 == p['id'],
+          ),
       ],
       lists: playerLists,
       banners: [for (final p in players) bannerAsset(table, p['id'] as int)],
@@ -335,13 +339,31 @@ Future<RowTable> fetchRows(String table) async {
   }
 
   if (table == 'jeu') {
-    final (boardGames, players, (:games, places: _, dates: _, ids: _)) = await (
+    final (boardGames, players, (:games, :places, :dates, ids: _)) = await (
       db.from('jeu').select('id, nom').order('nom', ascending: true),
       db.from('joueur').select('id, nom').order('nom', ascending: true),
       _fetchGames(db),
     ).wait;
     final elo = computeElo(games);
+    final playerNames = {
+      for (final p in players) p['id'] as int: p['nom'] as String,
+    };
+    final gameNames = {
+      for (final j in boardGames) j['id'] as int: j['nom'] as String,
+    };
     return RowTable(
+      // Sous le classement : les parties jouées à ce jeu.
+      matchLists: [
+        for (final j in boardGames)
+          _matchDetails(
+            games: games,
+            places: places,
+            dates: dates,
+            playerNames: playerNames,
+            gameNames: gameNames,
+            where: (g) => g.game == j['id'],
+          ),
+      ],
       banners: [for (final j in boardGames) bannerAsset(table, j['id'] as int)],
       columns: const ['Nom'],
       rows: [
@@ -351,9 +373,21 @@ Future<RowTable> fetchRows(String table) async {
       badges: [for (final j in boardGames) elo[j['id'] as int]?.length ?? 0],
       lists: [
         for (final j in boardGames)
-          ranking(elo[j['id'] as int] ?? const {}, {
-            for (final p in players) p['id'] as int: p['nom'] as String,
-          }),
+          ranking(elo[j['id'] as int] ?? const {}, playerNames),
+      ],
+      // Pastilles de chaque joueur classé : ses 5 dernières parties à ce jeu.
+      listForms: [
+        for (final j in boardGames)
+          [
+            for (final id in rankedPlayers(
+              elo[j['id'] as int] ?? const {},
+              playerNames,
+            ))
+              recentForm([
+                for (final g in games)
+                  if (g.game == j['id']) g,
+              ], id),
+          ],
       ],
     );
   }
@@ -398,13 +432,16 @@ int _byEloThenName((String, double) a, (String, double) b) {
 List<(String, String)> ranking(
   Map<int, double> ratings,
   Map<int, String> players,
-) {
+) => [
+  for (final (i, id) in rankedPlayers(ratings, players).indexed)
+    ('${i + 1}. ${players[id]}', '${ratings[id]!.round()}'),
+];
+
+/// Ids des joueurs de [ratings], dans l'ordre du classement (voir [ranking]).
+List<int> rankedPlayers(Map<int, double> ratings, Map<int, String> players) {
   final ranked = [
     for (final MapEntry(key: id, value: elo) in ratings.entries)
-      (players[id]!, elo),
-  ]..sort(_byEloThenName);
-  return [
-    for (final (i, (name, elo)) in ranked.indexed)
-      ('${i + 1}. $name', '${elo.round()}'),
-  ];
+      (id, (players[id]!, elo)),
+  ]..sort((a, b) => _byEloThenName(a.$2, b.$2));
+  return [for (final (id, _) in ranked) id];
 }

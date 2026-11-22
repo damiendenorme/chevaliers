@@ -427,10 +427,10 @@ void main() {
     // Par date : de la plus récente à la plus ancienne, puis l'inverse.
     await tester.tap(find.text('Date'));
     await tester.pump();
-    expect(y('21/11/2026'), lessThan(y('03/11/2026')));
+    expect(y('21/11/26'), lessThan(y('03/11/26')));
     await tester.tap(find.text('Date'));
     await tester.pump();
-    expect(y('03/11/2026'), lessThan(y('21/11/2026')));
+    expect(y('03/11/26'), lessThan(y('21/11/26')));
 
     // Le jeu à gauche du joueur 1, le lieu à droite du joueur 2, et
     // l'évolution du ELO de chacun près de son nom.
@@ -444,7 +444,7 @@ void main() {
     expect(right('−4,6'), lessThan(left('Arthur')));
     expect(left('+4,6'), greaterThan(right('Bors')));
     // La date à gauche du jeu.
-    expect(right('21/11/2026'), lessThan(left('Go')));
+    expect(right('21/11/26'), lessThan(left('Go')));
 
     // Pastilles par jeu dans la liste de ses jeux.
     final semantics = tester.ensureSemantics();

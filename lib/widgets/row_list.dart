@@ -807,11 +807,11 @@ class _Broken extends StatelessWidget {
 
 /// Liste de parties, au style de la liste de gauche, sous un petit titre.
 /// Rien si la liste est vide.
-/// Date au format jj/mm/aaaa, dans le fuseau de l'appareil.
+/// Date au format JJ/MM/AA, dans le fuseau de l'appareil.
 String _formatDate(DateTime date) {
   final d = date.toLocal();
   String two(int n) => n.toString().padLeft(2, '0');
-  return '${two(d.day)}/${two(d.month)}/${d.year}';
+  return '${two(d.day)}/${two(d.month)}/${two(d.year % 100)}';
 }
 
 /// Tri des parties du détail : par date (de la plus récente à la plus
@@ -823,7 +823,7 @@ class _MatchupList extends StatefulWidget {
 
   /// Largeur des colonnes de la date et du jeu, à gauche, et de celle du
   /// lieu, à droite.
-  static const double dateWidth = 76;
+  static const double dateWidth = 60;
   static const double gameWidth = 120;
   static const double placeWidth = 80;
 
@@ -889,10 +889,12 @@ class _MatchupListState extends State<_MatchupList> {
           decoration: BoxDecoration(border: Border(bottom: divider)),
           child: Row(
             children: [
-              SizedBox(
-                width: dateWidth + 12,
+              // Au moins la largeur de la colonne : « Jeu » au-dessus des jeux.
+              ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: dateWidth + 12),
                 child: Align(
                   alignment: Alignment.centerLeft,
+                  widthFactor: 1,
                   child: _SortHeader(
                     'Date',
                     arrow: _sortBy == _MatchSort.date ? _ascending : null,
