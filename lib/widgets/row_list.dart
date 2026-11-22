@@ -591,7 +591,8 @@ class _Badge extends StatelessWidget {
 }
 
 /// Bannière en haut du détail : l'image (asset) de la ligne sur toute la
-/// largeur. Sans fichier, un bandeau vide de même taille.
+/// largeur, en fondu vers le transparent en bas. Sans fichier, un bandeau
+/// vide de même taille.
 class _Banner extends StatelessWidget {
   const _Banner(this.asset);
 
@@ -602,15 +603,26 @@ class _Banner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final empty = ColoredBox(color: Theme.of(context).scaffoldBackgroundColor);
-    return SizedBox(
-      height: height,
-      child: asset == null
-          ? empty
-          : Image.asset(
-              asset!,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => empty,
-            ),
+    // Fondu vers le transparent en allant vers le bas : la bannière se fond
+    // dans le fond de la carte.
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (bounds) => const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Colors.white, Colors.transparent],
+      ).createShader(bounds),
+      child: SizedBox(
+        height: height,
+        width: double.infinity,
+        child: asset == null
+            ? empty
+            : Image.asset(
+                asset!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => empty,
+              ),
+      ),
     );
   }
 }
