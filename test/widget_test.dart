@@ -686,6 +686,51 @@ void main() {
     expect(box.bottom, lessThan(tester.getRect(find.byType(SectionBar)).top));
   });
 
+  testWidgets('Two bookmarks hang from the left edge: Wargame and RPG', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => const RowTable(columns: ['Nom'], rows: []),
+          loadCounts: () async =>
+              (players: 0, events: 0, games: 0, boardGames: 0),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final bookmarks = find.byType(Bookmark);
+    expect(bookmarks, findsNWidgets(2));
+    final wargame = tester.getRect(find.text('Wargame'));
+    final rpg = tester.getRect(find.text('RPG'));
+    // L'un sous l'autre, contre le bord gauche, hors des cartes ; texte
+    // vertical ; ensemble centré verticalement sur l'écran.
+    expect(rpg.top, greaterThan(wargame.bottom));
+    expect(wargame.height, greaterThan(wargame.width));
+    expect(wargame.right, lessThan(60));
+    expect(
+      (wargame.top + rpg.bottom) / 2,
+      moreOrLessEquals(800 / 2, epsilon: 25),
+    );
+
+    bool active(String label) => tester
+        .widget<Bookmark>(
+          find.ancestor(of: find.text(label), matching: bookmarks),
+        )
+        .active;
+    expect(active('Wargame'), isTrue);
+    expect(active('RPG'), isFalse);
+    await tester.tap(find.text('RPG'));
+    await tester.pump();
+    expect(active('RPG'), isTrue);
+    expect(active('Wargame'), isFalse);
+  });
+
   testWidgets('Hovering a button does not animate or resize it', (
     tester,
   ) async {

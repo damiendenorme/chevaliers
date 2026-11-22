@@ -99,6 +99,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
   late final Future<Counts> _counts = widget.loadCounts();
 
+  /// Marque-pages du bord gauche de l'écran, et celui qui est actif.
+  static const _bookmarks = ['Wargame', 'RPG'];
+  int _bookmark = 0;
+
   /// Section affichée, dont le bouton est actif.
   int _active = _startSection;
 
@@ -127,6 +131,25 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
         child: Stack(
           children: [
+            // Fondu au noir sur les bords gauche et droit de l'écran, sur
+            // l'image de fond, sous le reste.
+            const Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.black,
+                        Color(0x00000000),
+                        Color(0x00000000),
+                        Colors.black,
+                      ],
+                      stops: [0, 0.18, 0.82, 1],
+                    ),
+                  ),
+                ),
+              ),
+            ),
             Positioned.fill(
               child: SafeArea(
                 child: Column(
@@ -174,6 +197,26 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   ],
                 ),
+              ),
+            ),
+            // Marque-pages contre le bord gauche de l'écran, centrés
+            // verticalement.
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 8,
+                children: [
+                  for (final (i, label) in _bookmarks.indexed)
+                    Bookmark(
+                      label: label,
+                      active: i == _bookmark,
+                      onPressed: () => setState(() => _bookmark = i),
+                    ),
+                ],
               ),
             ),
             // Encoche contre le bord du haut de l'écran : les nombres de

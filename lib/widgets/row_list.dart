@@ -73,50 +73,9 @@ class _Cards extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: RowList.gap,
       children: [
-        SizedBox(width: RowList.listWidth, child: _Card(master)),
-        Expanded(child: _Card(detail ?? const SizedBox.shrink())),
+        SizedBox(width: RowList.listWidth, child: CardSurface(master)),
+        Expanded(child: CardSurface(detail ?? const SizedBox.shrink())),
       ],
-    );
-  }
-}
-
-/// Carte sur l'image Carte assombrie, à coins arrondis, bourrelet bronze en
-/// relief et légère ombre ; son contenu
-/// (ligne active, survol) est découpé avec.
-class _Card extends StatelessWidget {
-  const _Card(this.child);
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(8);
-    // L'ombre est posée hors du découpage, pour ne pas être coupée ; le
-    // bourrelet bronze par-dessus le contenu.
-    return DecoratedBox(
-      decoration: BoxDecoration(borderRadius: radius, boxShadow: lightShadow),
-      position: DecorationPosition.background,
-      child: BevelEdge(
-        child: ClipRRect(
-          borderRadius: radius,
-          // Fond : l'image Carte, assombrie pour garder le texte clair
-          // lisible, étirée pour que son cadre suive les bords de la carte.
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: topBarColor,
-              image: DecorationImage(
-                image: const AssetImage('assets/Carte.jpg'),
-                fit: BoxFit.fill,
-                colorFilter: ColorFilter.mode(
-                  Colors.black.withValues(alpha: 0.72),
-                  BlendMode.srcATop,
-                ),
-              ),
-            ),
-            child: child,
-          ),
-        ),
-      ),
     );
   }
 }
