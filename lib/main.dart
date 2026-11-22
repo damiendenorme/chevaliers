@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'data/rows.dart';
@@ -93,8 +94,8 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   /// Marque-pages du bord gauche de l'écran, et celui qui est actif.
   static const _bookmarks = [
-    ('Wargame', AccentStyle.wargame),
-    ('RPG', AccentStyle.rpg),
+    ('Wargame', AccentStyle.wargame, 'assets/icons/wargame.svg'),
+    ('RPG', AccentStyle.rpg, 'assets/icons/rpg.svg'),
   ];
   int _bookmark = 0;
 
@@ -165,30 +166,36 @@ class _MyHomePageState extends State<MyHomePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 spacing: 8,
                 children: [
-                  for (final (i, (label, accent)) in _bookmarks.indexed)
+                  for (final (i, (label, accent, icon)) in _bookmarks.indexed)
                     Bookmark(
                       label: label,
                       accent: accent,
+                      icon: icon,
                       active: i == _bookmark,
                       onPressed: () => setState(() => _bookmark = i),
                     ),
                 ],
               ),
             ),
-            // En haut à droite, à l'écart des bords : Discord, aux couleurs
-            // de la page affichée.
+            // En haut à droite, à l'écart des bords : Discord, puis Facebook
+            // et Instagram dessous, de même largeur, aux couleurs de la page
+            // affichée.
             Positioned(
               top: 12,
               right: 12,
               child: AccentScope(
                 style: _bookmarks[_bookmark].$2,
-                child: const Plate(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                child: const IntrinsicWidth(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     spacing: 8,
                     children: [
-                      Icon(Icons.discord, size: 18),
-                      Text('Discord', style: TextStyle(fontSize: 14)),
+                      _SocialPlate(Icon(Icons.discord, size: 18), 'Discord'),
+                      _SocialPlate(Icon(Icons.facebook, size: 18), 'Facebook'),
+                      _SocialPlate(
+                        FaIcon(FontAwesomeIcons.instagram, size: 18),
+                        'Instagram',
+                      ),
                     ],
                   ),
                 ),
@@ -196,6 +203,27 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Plaque d'un réseau social : son icône et son nom.
+class _SocialPlate extends StatelessWidget {
+  const _SocialPlate(this.icon, this.label);
+
+  final Widget icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Plate(
+      child: Row(
+        spacing: 8,
+        children: [
+          SizedBox(width: 18, child: Center(child: icon)),
+          Text(label, style: const TextStyle(fontSize: 14)),
+        ],
       ),
     );
   }

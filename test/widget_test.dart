@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chevaliers/data/rows.dart';
@@ -36,10 +37,21 @@ void main() {
       findsOneWidget,
     );
     expect(find.byIcon(Icons.discord), findsOneWidget);
-    final plate = tester.getRect(find.byType(Plate));
+    Rect plateOf(String label) => tester.getRect(
+      find.ancestor(of: find.text(label), matching: find.byType(Plate)),
+    );
+    final plate = plateOf('Discord');
     final screenRect = tester.getRect(find.byType(MyHomePage));
     expect(plate.top, screenRect.top + 12);
     expect(plate.right, screenRect.right - 12);
+    // Facebook puis Instagram dessous, de même largeur.
+    final facebook = plateOf('Facebook');
+    final instagram = plateOf('Instagram');
+    expect(facebook.top, greaterThan(plate.bottom));
+    expect(instagram.top, greaterThan(facebook.bottom));
+    expect(facebook.width, plate.width);
+    expect(instagram.width, plate.width);
+    expect(facebook.right, plate.right);
 
     final screen = tester.getRect(find.byType(MyHomePage));
     await tester.tap(find.byType(SectionButton).first);
@@ -716,17 +728,34 @@ void main() {
 
     final bookmarks = find.byType(Bookmark);
     expect(bookmarks, findsNWidgets(2));
-    final wargame = tester.getRect(find.text('Wargame'));
-    final rpg = tester.getRect(find.text('RPG'));
-    // L'un sous l'autre, contre le bord gauche, hors des cartes ; texte
-    // vertical ; ensemble centré verticalement sur l'écran.
-    expect(rpg.top, greaterThan(wargame.bottom));
-    expect(wargame.height, greaterThan(wargame.width));
-    expect(wargame.right, lessThan(60));
-    expect(
-      (wargame.top + rpg.bottom) / 2,
-      moreOrLessEquals(800 / 2, epsilon: 25),
+    // Même hauteur, chacun avec son icône.
+    Rect bookmarkOf(String label) => tester.getRect(
+      find.ancestor(of: find.text(label), matching: find.byType(Bookmark)),
     );
+    expect(bookmarkOf('Wargame').height, Bookmark.height);
+    expect(bookmarkOf('RPG').height, Bookmark.height);
+    expect(
+      find.descendant(of: bookmarks, matching: find.byType(SvgPicture)),
+      findsNWidgets(2),
+    );
+    // L'un sous l'autre, contre le bord gauche ; ensemble centré
+    // verticalement sur l'écran.
+    final wargameBox = bookmarkOf('Wargame');
+    final rpgBox = bookmarkOf('RPG');
+    expect(rpgBox.top, greaterThan(wargameBox.bottom));
+    expect(
+      (wargameBox.top + rpgBox.bottom) / 2,
+      moreOrLessEquals(800 / 2, epsilon: 1),
+    );
+    // Actif : texte horizontal, plus large ; inactif : texte vertical.
+    bool horizontal(String label) {
+      final r = tester.getRect(find.text(label));
+      return r.width > r.height;
+    }
+
+    expect(horizontal('Wargame'), isTrue);
+    expect(horizontal('RPG'), isFalse);
+    expect(wargameBox.width, greaterThan(rpgBox.width));
 
     bool active(String label) => tester
         .widget<Bookmark>(
@@ -735,10 +764,19 @@ void main() {
         .active;
     expect(active('Wargame'), isTrue);
     expect(active('RPG'), isFalse);
+    final rpgBefore = bookmarkOf('RPG').width;
     await tester.tap(find.text('RPG'));
+    // Animation : à mi-chemin, le marque-page tiré s'élargit encore.
     await tester.pump();
+    await tester.pump(Bookmark.duration ~/ 3);
+    final rpgDuring = tester.getRect(find.byType(Bookmark).last).width;
+    expect(rpgDuring, greaterThan(rpgBefore));
+    await tester.pumpAndSettle();
+    expect(bookmarkOf('RPG').width, greaterThan(rpgDuring - 1));
     expect(active('RPG'), isTrue);
     expect(active('Wargame'), isFalse);
+    expect(horizontal('RPG'), isTrue);
+    expect(horizontal('Wargame'), isFalse);
   });
 
   testWidgets('The RPG bookmark shows its own, independent page', (
@@ -790,7 +828,7 @@ void main() {
 
     // RPG : sa page, avec ses données et ses nombres, au même design.
     await tester.tap(find.text('RPG'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.text('Merlin'), findsOneWidget);
     expect(find.text('Arthur'), findsNothing);
     expect(inNotch('5'), findsOneWidget);
@@ -813,7 +851,7 @@ void main() {
 
     // Retour au Wargame : il a gardé sa section, sans recharger.
     await tester.tap(find.text('Wargame'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.text('Arthur'), findsOneWidget);
     expect(wargame, ['partie', 'jeu']);
   });

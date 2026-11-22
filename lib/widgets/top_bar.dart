@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 /// Couleur des zones posées sur le fond (barre, boutons, cartes) : brun
 /// sombre de cuir ancien.
@@ -40,6 +41,14 @@ class AccentStyle {
     Color(0xFFAA9262),
     hover: Color(0xFF45301E),
     edge: (Color(0xFF3A2A18), Color(0xFFC8A66C), Color(0xFF4A3822)),
+  );
+
+  /// Gris neutre : bourrelet des marque-pages inactifs.
+  static const inactive = AccentStyle(
+    Color(0xFF5A5652),
+    Color(0xFF6E6762),
+    hover: Color(0xFF2E2B29),
+    edge: (Color(0xFF1E1C1A), Color(0xFF8A8580), Color(0xFF2A2725)),
   );
 
   /// RPG : bronze, plus cuivré et plus sombre que l'or du Wargame.
@@ -170,15 +179,17 @@ class Plate extends StatelessWidget {
 }
 
 /// Marque-page accroché au bord gauche de l'écran, au design des cartes,
-/// avec son texte vertical (de bas en haut) : son côté gauche dépasse de
+/// avec son nom et son icône sur une ligne : verticale (de bas en haut) s'il
+/// est inactif, horizontale s'il est actif ; tous de même hauteur : son côté gauche dépasse de
 /// l'écran, seuls son bout et ses coins droits, arrondis, sont visibles.
-/// Actif, il est coloré comme la ligne choisie d'une liste, dépasse un peu
-/// plus et paraît en creux ; non choisi, il paraît bombé.
+/// Actif, il est coloré comme la ligne choisie d'une liste, plus large et en
+/// creux ; inactif, il est gris et bombé.
 class Bookmark extends StatelessWidget {
   const Bookmark({
     super.key,
     required this.label,
     required this.onPressed,
+    required this.icon,
     this.active = false,
     this.accent = AccentStyle.wargame,
   });
@@ -186,14 +197,25 @@ class Bookmark extends StatelessWidget {
   /// Couleur d'accentuation, quand il est actif : celle de sa page.
   final AccentStyle accent;
 
-  /// Largeur visible.
-  static const double width = 40;
+  /// Chemin de son icône (SVG) dans les assets.
+  final String icon;
+
+  /// Largeur visible d'un marque-page inactif : son nom et son icône sur
+  /// une ligne tournée à la verticale.
+  static const double inactiveWidth = 40;
+
+  /// Largeur visible du marque-page actif : son nom à l'horizontale et son
+  /// icône à droite.
+  static const double activeWidth = 130;
+
+  /// Hauteur, la même pour tous les marque-pages.
+  static const double height = 150;
 
   /// Partie cachée à gauche de l'écran (rayon des coins et bourrelet).
   static const double _hidden = 12;
 
-  /// Le marque-page actif dépasse de ce supplément.
-  static const double _activeExtra = 8;
+  /// Durée de l'animation : le marque-page qu'on tire ou qu'on repousse.
+  static const duration = Duration(milliseconds: 320);
 
   final String label;
   final VoidCallback onPressed;
@@ -201,16 +223,38 @@ class Bookmark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shift = active ? 0.0 : -_activeExtra;
-    const hiddenPart = _hidden + _activeExtra;
-    const total = width + hiddenPart;
-    // Bourrelet et survol aux couleurs de sa page.
+    final visible = active ? activeWidth : inactiveWidth;
+    final total = visible + _hidden;
+    // Actif : bourrelet et survol aux couleurs de sa page ; inactif : gris.
+    final style = active ? accent : AccentStyle.inactive;
+    final color = active
+        ? Colors.white
+        : DefaultTextStyle.of(context).style.color ??
+              Theme.of(context).colorScheme.onSurface;
+    final line = Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: 6,
+      children: [
+        Text(label, style: TextStyle(fontSize: 14, color: color)),
+        SvgPicture.asset(
+          icon,
+          width: 18,
+          height: 18,
+          colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+        ),
+      ],
+    );
     return AccentScope(
-      style: accent,
+      style: style,
       child: Transform.translate(
-        offset: Offset(-_hidden + shift, 0),
-        child: SizedBox(
+        offset: const Offset(-_hidden, 0),
+        // Tiré (actif) : il s'élargit, avec un léger dépassement comme un
+        // geste de la main ; repoussé : il se rétracte.
+        child: AnimatedContainer(
+          duration: duration,
+          curve: active ? Curves.easeOutBack : Curves.easeInOutCubic,
           width: total,
+          height: height,
           child: Semantics(
             button: true,
             selected: active,
@@ -223,31 +267,40 @@ class Bookmark extends StatelessWidget {
                 child: Ink(
                   decoration: active
                       ? accent.texture
-                      : const BoxDecoration(
+                      : BoxDecoration(
                           gradient: LinearGradient(
-                            colors: [
+                            colors: const [
                               Color(0x40000000),
                               Color(0x2EFFFFFF),
                               Color(0x00FFFFFF),
                               Color(0x66000000),
                             ],
-                            stops: [hiddenPart / total, 0.55, 0.75, 1],
+                            stops: [_hidden / total, 0.55, 0.75, 1],
                           ),
                         ),
                   child: InkWell(
                     onTap: onPressed,
-                    hoverColor: accent.hover,
+                    hoverColor: style.hover,
+                    // Son nom puis son icône sur une ligne, centrée dans la
+                    // partie visible : à l'horizontale s'il est actif, tournée
+                    // à la verticale (lue de bas en haut) sinon.
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(hiddenPart, 20, 0, 20),
+                      padding: const EdgeInsets.fromLTRB(_hidden, 16, 0, 16),
+                      // La ligne tourne d'un quart de tour pendant
+                      // l'animation : de la verticale à l'horizontale quand
+                      // on le tire, et inversement. Elle garde sa taille,
+                      // le marque-page la découpe si besoin.
                       child: Center(
-                        child: RotatedBox(
-                          quarterTurns: 3,
-                          child: Text(
-                            label,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: active ? Colors.white : null,
-                            ),
+                        child: OverflowBox(
+                          maxWidth: double.infinity,
+                          maxHeight: double.infinity,
+                          child: AnimatedRotation(
+                            turns: active ? 0 : -0.25,
+                            duration: duration,
+                            curve: active
+                                ? Curves.easeOutBack
+                                : Curves.easeInOutCubic,
+                            child: line,
                           ),
                         ),
                       ),
