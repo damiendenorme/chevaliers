@@ -286,7 +286,64 @@ void main() {
     expect(firstValue.left, greaterThanOrEqualTo(first.right));
     expect(firstValue.right, tester.getRect(find.byType(RowList)).right - 12);
     expect(second.top - first.top, master.height + 8);
-    expect(find.text('Nom'), findsNothing);
+    // « Nom » : seulement dans l'en-tête de la liste, pas dans le détail.
+    expect(find.text('Nom'), findsOneWidget);
+    expect(
+      tester.getRect(find.text('Nom')).right,
+      lessThan(tester.getRect(find.byType(RowList)).left + RowList.listWidth),
+    );
+  });
+
+  testWidgets('The games list sorts by name or number of players', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => const RowTable(
+            columns: ['Nom'],
+            rows: [
+              ['Dames'],
+              ['Échecs'],
+              ['Go'],
+            ],
+            badges: [5, 2, 7],
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byType(SectionButton).at(3));
+    await tester.pumpAndSettle();
+
+    List<String> order() => ['Dames', 'Échecs', 'Go']
+      ..sort(
+        (a, b) => tester
+            .getRect(find.text(a))
+            .top
+            .compareTo(tester.getRect(find.text(b)).top),
+      );
+    final playersHeader = find.descendant(
+      of: find.byType(RowList),
+      matching: find.text('Joueurs'),
+    );
+
+    // Par nom au départ.
+    expect(order(), ['Dames', 'Échecs', 'Go']);
+    // Par nombre de joueurs : du plus grand au plus petit, puis l'inverse.
+    await tester.tap(playersHeader);
+    await tester.pump();
+    expect(order(), ['Go', 'Dames', 'Échecs']);
+    await tester.tap(playersHeader);
+    await tester.pump();
+    expect(order(), ['Échecs', 'Dames', 'Go']);
+    // Retour au nom.
+    await tester.tap(find.text('Nom'));
+    await tester.pump();
+    expect(order(), ['Dames', 'Échecs', 'Go']);
   });
 
   testWidgets('The players list header sorts by name or score', (tester) async {
@@ -522,6 +579,57 @@ void main() {
       message.center.dy,
       moreOrLessEquals((scoreBottom + 16 + card.bottom) / 2, epsilon: 1),
     );
+  });
+
+  testWidgets('Events show their date and sort by name or date', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => RowTable(
+            columns: const ['Nom', 'Date'],
+            rows: const [
+              ['Automne', '12/10/26'],
+              ['Été', '05/07/27'],
+              ['Printemps', '—'],
+            ],
+            dates: [DateTime(2026, 10, 12), DateTime(2027, 7, 5), null],
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byType(SectionButton).at(1));
+    await tester.pumpAndSettle();
+
+    List<String> order() => ['Automne', 'Été', 'Printemps']
+      ..sort(
+        (a, b) => tester
+            .getRect(find.text(a))
+            .top
+            .compareTo(tester.getRect(find.text(b)).top),
+      );
+
+    // La date à droite du nom, sur la même ligne.
+    final name = tester.getRect(find.text('Automne'));
+    final date = tester.getRect(find.text('12/10/26'));
+    expect(date.left, greaterThan(name.right));
+    expect(date.center.dy, name.center.dy);
+
+    // Par nom au départ (accents ignorés).
+    expect(order(), ['Automne', 'Été', 'Printemps']);
+    // Par date : la plus récente d'abord, sans date en dernier ; puis
+    // l'inverse.
+    await tester.tap(find.text('Date'));
+    await tester.pump();
+    expect(order(), ['Été', 'Automne', 'Printemps']);
+    await tester.tap(find.text('Date'));
+    await tester.pump();
+    expect(order(), ['Automne', 'Été', 'Printemps']);
   });
 
   testWidgets('Hovering a button does not animate or resize it', (

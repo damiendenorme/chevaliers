@@ -113,4 +113,15 @@ void main() {
     expect(deltas[1], greaterThan(0));
     expect(deltas[2], -50); // autre jeu : défaite entre égaux
   });
+
+  test('compareNames ignores accents and case', () {
+    final names = ['Go', 'échecs', 'Dames', 'Échecs', 'awalé'];
+    expect(names..sort(compareNames), [
+      'awalé',
+      'Dames',
+      'Échecs',
+      'échecs',
+      'Go',
+    ]);
+  });
 }

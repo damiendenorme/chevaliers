@@ -131,13 +131,35 @@ class _MasterDetailState extends State<_MasterDetail> {
   /// Ligne affichée à droite, ou null tant qu'aucune n'est choisie.
   int? _selected;
 
-  /// Tri de la liste (s'il y a des scores) : par score décroissant au
-  /// départ.
-  _SortBy _sortBy = _SortBy.score;
-  bool _ascending = false;
+  /// Valeur de tri de chaque ligne, à côté du nom : le score (joueurs), le
+  /// nombre de joueurs (jeux) ou la date (événements).
+  Comparable<Object>? _value(RowTable table, int i) =>
+      table.globalScores != null
+      ? table.globalScore(i)
+      : table.badges != null
+      ? table.badge(i)
+      : table.date(i);
+
+  /// Titre de la colonne de cette valeur, ou null : liste sans en-tête.
+  String? get _valueLabel {
+    final table = widget.table;
+    if (table.globalScores != null) return 'Score';
+    if (table.badges != null) return 'Joueurs';
+    if (table.dates != null) return 'Date';
+    return null;
+  }
+
+  bool get _sortable => _valueLabel != null;
+
+  /// Tri de la liste au départ : les joueurs par score décroissant, les
+  /// jeux par nom.
+  late _SortBy _sortBy = widget.table.globalScores != null
+      ? _SortBy.score
+      : _SortBy.name;
+  late bool _ascending = _sortBy == _SortBy.name;
 
   /// Cliquer sur la colonne déjà triée inverse le sens ; sur l'autre, trie
-  /// par nom de A à Z, ou par score du meilleur au moins bon.
+  /// par nom de A à Z, ou par valeur décroissante.
   void _sort(_SortBy by) {
     setState(() {
       _ascending = by == _sortBy ? !_ascending : by == _SortBy.name;
@@ -145,23 +167,23 @@ class _MasterDetailState extends State<_MasterDetail> {
     });
   }
 
-  /// Positions des lignes dans l'ordre affiché. Sans score, toujours en
+  /// Positions des lignes dans l'ordre affiché. Sans valeur, toujours en
   /// dernier.
   List<int> _order(RowTable table) {
     final order = [for (var i = 0; i < table.rows.length; i++) i];
-    if (table.globalScores == null) return order;
+    if (!_sortable) return order;
     final direction = _ascending ? 1 : -1;
     return order..sort((a, b) {
       if (_sortBy == _SortBy.score) {
-        final (sa, sb) = (table.globalScore(a), table.globalScore(b));
+        final (sa, sb) = (_value(table, a), _value(table, b));
         if (sa == null || sb == null) {
           if (sa != sb) return sa == null ? 1 : -1;
         } else if (sa != sb) {
-          return direction * sa.compareTo(sb);
+          return direction * sa.compareTo(sb as Object);
         }
       }
       return (_sortBy == _SortBy.name ? direction : 1) *
-          table.title(a).compareTo(table.title(b));
+          compareNames(table.title(a), table.title(b));
     });
   }
 
@@ -200,7 +222,7 @@ class _MasterDetailState extends State<_MasterDetail> {
     return _Cards(
       // Avec des scores : un en-tête fixe au-dessus de la liste, pour la
       // trier par nom ou par score.
-      master: table.globalScores == null
+      master: !_sortable
           ? list
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -217,7 +239,7 @@ class _MasterDetailState extends State<_MasterDetail> {
                         ),
                       ),
                       _SortHeader(
-                        'Score',
+                        _valueLabel!,
                         arrow: _sortBy == _SortBy.score ? _ascending : null,
                         onTap: () => _sort(_SortBy.score),
                       ),
@@ -302,6 +324,16 @@ class _MasterLine extends StatelessWidget {
         children: [
           Expanded(child: text(table.title(index))),
           _Badge(badge, style: style),
+        ],
+      );
+    }
+    final date = table.dates == null ? null : table.date(index);
+    if (m == null && table.dates != null) {
+      return Row(
+        spacing: 8,
+        children: [
+          Expanded(child: text(table.title(index))),
+          text(date == null ? '—' : formatDate(date)),
         ],
       );
     }
@@ -614,9 +646,9 @@ class _LineListState extends State<_LineList> {
       if (_sortBy == _SortBy.score) {
         final byValue = num.parse(a.$2).compareTo(num.parse(b.$2));
         if (byValue != 0) return direction * byValue;
-        return a.$1.compareTo(b.$1);
+        return compareNames(a.$1, b.$1);
       }
-      return direction * a.$1.compareTo(b.$1);
+      return direction * compareNames(a.$1, b.$1);
     });
   }
 
@@ -807,13 +839,6 @@ class _Broken extends StatelessWidget {
 
 /// Liste de parties, au style de la liste de gauche, sous un petit titre.
 /// Rien si la liste est vide.
-/// Date au format JJ/MM/AA, dans le fuseau de l'appareil.
-String _formatDate(DateTime date) {
-  final d = date.toLocal();
-  String two(int n) => n.toString().padLeft(2, '0');
-  return '${two(d.day)}/${two(d.month)}/${two(d.year % 100)}';
-}
-
 /// Tri des parties du détail : par date (de la plus récente à la plus
 /// ancienne, l'ordre de départ), par jeu ou par lieu.
 enum _MatchSort { date, game, place }
@@ -860,7 +885,7 @@ class _MatchupListState extends State<_MatchupList> {
         _sortBy == _MatchSort.game ? m.game : (m.place ?? '');
     final direction = _ascending ? 1 : -1;
     return order..sort((i, j) {
-      final byKey = key(matchups[i]).compareTo(key(matchups[j]));
+      final byKey = compareNames(key(matchups[i]), key(matchups[j]));
       return byKey != 0 ? direction * byKey : i.compareTo(j);
     });
   }
@@ -977,7 +1002,7 @@ class _MatchDetailLine extends StatelessWidget {
           const SizedBox(height: 20),
           // La date, le jeu et le lieu l'un sous l'autre, centrés et plus
           // petits, puis la partie.
-          for (final info in [_formatDate(m.date), m.game, ?m.place])
+          for (final info in [formatDate(m.date), m.game, ?m.place])
             Text(
               info,
               style: label.copyWith(fontSize: 12),
@@ -994,7 +1019,7 @@ class _MatchDetailLine extends StatelessWidget {
     return Row(
       spacing: 12,
       children: [
-        column(_formatDate(m.date), _MatchupList.dateWidth),
+        column(formatDate(m.date), _MatchupList.dateWidth),
         column(m.game, _MatchupList.gameWidth),
         Expanded(child: matchup),
         column(m.place ?? '', _MatchupList.placeWidth, align: TextAlign.right),

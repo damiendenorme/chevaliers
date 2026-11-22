@@ -17,6 +17,7 @@ class RowTable {
     this.matchLists,
     this.matchDetails,
     this.photos,
+    this.dates,
     this.banners,
     this.lists,
     this.sortableLists = false,
@@ -70,6 +71,13 @@ class RowTable {
   final List<List<String>>? photos;
 
   List<String>? photosOf(int index) => photos?[index];
+
+  /// Date de chaque ligne, affichée à droite dans la liste, qui peut être
+  /// triée par nom ou par date (pour les événements). Null si elle n'en a
+  /// pas.
+  final List<DateTime?>? dates;
+
+  DateTime? date(int index) => dates?[index];
 
   /// Chemin d'asset de l'image de bannière de chaque ligne (voir
   /// [bannerAsset]). Le fichier peut ne pas exister.
@@ -220,6 +228,7 @@ _fetchGames(SupabaseClient db) async {
 /// Pour `partie` : les deux joueurs, leurs scores et le jeu.
 /// Pour `joueur` : le nom, son ELO à chaque jeu auquel il a joué et ses
 /// parties.
+/// Pour `evenement` : le nom et la date.
 /// Pour `jeu` : le nom, le classement ELO des joueurs qui y ont joué et ses
 /// parties.
 /// Pour les autres tables : le nom.
@@ -392,6 +401,29 @@ Future<RowTable> fetchRows(String table) async {
     );
   }
 
+  if (table == 'evenement') {
+    final rows = await db
+        .from('evenement')
+        .select('id, nom, date')
+        .order('nom', ascending: true);
+    final dates = [
+      for (final r in rows)
+        if (r['date'] case final String d) DateTime.parse(d) else null,
+    ];
+    return RowTable(
+      banners: [for (final r in rows) bannerAsset(table, r['id'] as int)],
+      dates: dates,
+      columns: const ['Nom', 'Date'],
+      rows: [
+        for (final (i, r) in rows.indexed)
+          [
+            r['nom'] as String,
+            if (dates[i] case final d?) formatDate(d) else '—',
+          ],
+      ],
+    );
+  }
+
   final rows = await db
       .from(table)
       .select('id, nom')
@@ -423,7 +455,7 @@ List<(String, String)> playerGames(
 /// Du meilleur ELO au moins bon ; à ELO égal, par nom.
 int _byEloThenName((String, double) a, (String, double) b) {
   final byElo = b.$2.compareTo(a.$2);
-  return byElo != 0 ? byElo : a.$1.compareTo(b.$1);
+  return byElo != 0 ? byElo : compareNames(a.$1, b.$1);
 }
 
 /// Classement ELO d'un jeu : les joueurs qui y ont joué (présents dans
@@ -444,4 +476,53 @@ List<int> rankedPlayers(Map<int, double> ratings, Map<int, String> players) {
       (id, (players[id]!, elo)),
   ]..sort((a, b) => _byEloThenName(a.$2, b.$2));
   return [for (final (id, _) in ranked) id];
+}
+
+/// Ordre alphabétique des noms, à la française : sans tenir compte des
+/// accents ni de la casse (« Échecs » avant « Go »). À égalité, l'ordre brut.
+int compareNames(String a, String b) {
+  final byKey = _nameKey(a).compareTo(_nameKey(b));
+  return byKey != 0 ? byKey : a.compareTo(b);
+}
+
+const _accents = {
+  'à': 'a',
+  'â': 'a',
+  'ä': 'a',
+  'á': 'a',
+  'ã': 'a',
+  'å': 'a',
+  'ç': 'c',
+  'é': 'e',
+  'è': 'e',
+  'ê': 'e',
+  'ë': 'e',
+  'î': 'i',
+  'ï': 'i',
+  'í': 'i',
+  'ì': 'i',
+  'ñ': 'n',
+  'ô': 'o',
+  'ö': 'o',
+  'ó': 'o',
+  'ò': 'o',
+  'õ': 'o',
+  'ù': 'u',
+  'û': 'u',
+  'ü': 'u',
+  'ú': 'u',
+  'ÿ': 'y',
+  'ý': 'y',
+  'œ': 'oe',
+  'æ': 'ae',
+};
+
+String _nameKey(String name) =>
+    [for (final c in name.toLowerCase().split('')) _accents[c] ?? c].join();
+
+/// Date au format JJ/MM/AA, dans le fuseau de l'appareil.
+String formatDate(DateTime date) {
+  final d = date.toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(d.day)}/${two(d.month)}/${two(d.year % 100)}';
 }
