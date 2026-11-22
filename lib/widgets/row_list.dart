@@ -304,6 +304,7 @@ class _MasterDetailState extends State<_MasterDetail> {
                       _MatchupList(
                         key: ValueKey(('parties', _selected)),
                         table.matchList(_selected!),
+                        showGame: table.matchListShowsGame,
                       ),
                     ],
                   ),
@@ -893,7 +894,11 @@ class _Broken extends StatelessWidget {
 enum _MatchSort { date, game, place }
 
 class _MatchupList extends StatefulWidget {
-  const _MatchupList(this.matchups, {super.key});
+  const _MatchupList(this.matchups, {super.key, this.showGame = true});
+
+  /// Affiche la colonne du jeu (inutile quand toutes les parties sont du
+  /// même jeu).
+  final bool showGame;
 
   /// Largeur des colonnes de la date et du jeu, à gauche, et de celle du
   /// lieu, à droite.
@@ -976,11 +981,12 @@ class _MatchupListState extends State<_MatchupList> {
                   ),
                 ),
               ),
-              _SortHeader(
-                'Jeu',
-                arrow: _sortBy == _MatchSort.game ? _ascending : null,
-                onTap: () => _sort(_MatchSort.game),
-              ),
+              if (widget.showGame)
+                _SortHeader(
+                  'Jeu',
+                  arrow: _sortBy == _MatchSort.game ? _ascending : null,
+                  onTap: () => _sort(_MatchSort.game),
+                ),
               const Spacer(),
               _SortHeader(
                 'Lieu',
@@ -995,7 +1001,10 @@ class _MatchupListState extends State<_MatchupList> {
         for (final m in [for (final i in _order(matchups)) matchups[i]])
           DecoratedBox(
             decoration: BoxDecoration(border: Border(bottom: divider)),
-            child: Padding(padding: _cellPadding, child: _MatchDetailLine(m)),
+            child: Padding(
+              padding: _cellPadding,
+              child: _MatchDetailLine(m, showGame: widget.showGame),
+            ),
           ),
       ],
     );
@@ -1010,10 +1019,14 @@ class _MatchupListState extends State<_MatchupList> {
 /// partie), la date, le jeu et le lieu passent l'un sous l'autre au-dessus :
 /// la partie a toute la largeur.
 class _MatchDetailLine extends StatelessWidget {
-  const _MatchDetailLine(this.m, {this.stacked = false});
+  const _MatchDetailLine(this.m, {this.stacked = false, this.showGame = true});
 
   final MatchDetail m;
   final bool stacked;
+
+  /// Affiche le jeu (dans une liste où toutes les parties sont du même jeu,
+  /// non).
+  final bool showGame;
 
   @override
   Widget build(BuildContext context) {
@@ -1069,7 +1082,7 @@ class _MatchDetailLine extends StatelessWidget {
       spacing: 12,
       children: [
         column(formatDate(m.date), _MatchupList.dateWidth),
-        column(m.game, _MatchupList.gameWidth),
+        if (showGame) column(m.game, _MatchupList.gameWidth),
         Expanded(child: matchup),
         column(m.place ?? '', _MatchupList.placeWidth, align: TextAlign.right),
       ],

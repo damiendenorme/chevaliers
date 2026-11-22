@@ -17,6 +17,7 @@ class RowTable {
     this.matchLists,
     this.matchDetails,
     this.photos,
+    this.matchListShowsGame = true,
     this.dates,
     this.banners,
     this.lists,
@@ -59,6 +60,10 @@ class RowTable {
   final List<List<MatchDetail>>? matchLists;
 
   List<MatchDetail> matchList(int index) => matchLists?[index] ?? const [];
+
+  /// Les parties du détail affichent leur jeu (pas pour un jeu : ce sont
+  /// toutes les siennes).
+  final bool matchListShowsGame;
 
   /// Pour les parties : chaque ligne est une partie, affichée en grand dans
   /// le détail, à la place de ses colonnes.
@@ -361,6 +366,7 @@ Future<RowTable> fetchRows(String table) async {
       for (final j in boardGames) j['id'] as int: j['nom'] as String,
     };
     return RowTable(
+      matchListShowsGame: false,
       // Sous le classement : les parties jouées à ce jeu.
       matchLists: [
         for (final j in boardGames)
