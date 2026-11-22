@@ -15,6 +15,7 @@ class RowTable {
     this.forms,
     this.globalScores,
     this.matchLists,
+    this.matchDetails,
     this.banners,
     this.lists,
     this.sortableLists = false,
@@ -56,6 +57,12 @@ class RowTable {
   final List<List<MatchDetail>>? matchLists;
 
   List<MatchDetail> matchList(int index) => matchLists?[index] ?? const [];
+
+  /// Pour les parties : chaque ligne est une partie, affichée en grand dans
+  /// le détail, à la place de ses colonnes.
+  final List<MatchDetail>? matchDetails;
+
+  MatchDetail? matchDetail(int index) => matchDetails?[index];
 
   /// Chemin d'asset de l'image de bannière de chaque ligne (voir
   /// [bannerAsset]). Le fichier peut ne pas exister.
@@ -116,15 +123,17 @@ int? globalElo(Map<int, Map<int, double>> elo, int player) {
 /// Une partie dans la liste : joueur 1, scores, joueur 2.
 typedef Matchup = ({String player1, int score1, int score2, String player2});
 
-/// Une partie dans le détail d'un joueur : sa date, la partie, son jeu, son
-/// lieu et
-/// l'évolution du ELO du joueur 1 (celle du joueur 2 est l'opposée).
+/// Une partie détaillée : sa date, la partie, son jeu, son lieu, l'évolution
+/// du ELO du joueur 1 (celle du joueur 2 est l'opposée) et les résultats des
+/// 5 dernières parties de chaque joueur (voir [recentForm]).
 typedef MatchDetail = ({
   DateTime date,
   Matchup matchup,
   String game,
   String? place,
   double eloDelta1,
+  List<Outcome> form1,
+  List<Outcome> form2,
 });
 
 /// Chemin d'asset de la bannière d'une ligne : `assets/bannieres/<table>/<id>.jpg`.
@@ -169,35 +178,55 @@ Future<RowTable> fetchRows(String table) async {
   final db = Supabase.instance.client;
 
   if (table == 'partie') {
-    final rows = await db
-        .from('partie')
-        .select(
-          'jeu_id, score_joueur1, score_joueur2, jeu(nom), '
-          'joueur1:joueur!partie_joueur1_id_fkey(nom), '
-          'joueur2:joueur!partie_joueur2_id_fkey(nom)',
-        )
-        .order('created_at', ascending: false);
+    final (players, boardGames, (:games, :places, :dates)) = await (
+      db.from('joueur').select('id, nom'),
+      db.from('jeu').select('id, nom'),
+      _fetchGames(db),
+    ).wait;
+    final playerNames = {
+      for (final p in players) p['id'] as int: p['nom'] as String,
+    };
+    final gameNames = {
+      for (final j in boardGames) j['id'] as int: j['nom'] as String,
+    };
+    final deltas = eloDeltas(games);
+    final forms = {
+      for (final p in players)
+        p['id'] as int: recentForm(games, p['id'] as int),
+    };
+    // De la plus récente à la plus ancienne.
+    final recent = games.indexed.toList().reversed.toList();
+    final details = [
+      for (final (i, g) in recent)
+        (
+          date: dates[i],
+          matchup: (
+            player1: playerNames[g.player1]!,
+            score1: g.score1,
+            score2: g.score2,
+            player2: playerNames[g.player2]!,
+          ),
+          game: gameNames[g.game]!,
+          place: places[i],
+          eloDelta1: deltas[i],
+          form1: forms[g.player1]!,
+          form2: forms[g.player2]!,
+        ),
+    ];
     return RowTable(
       // La bannière d'une partie est celle du jeu joué.
-      banners: [for (final r in rows) bannerAsset('jeu', r['jeu_id'] as int)],
-      matchups: [
-        for (final r in rows)
-          (
-            player1: r['joueur1']['nom'] as String,
-            score1: r['score_joueur1'] as int,
-            score2: r['score_joueur2'] as int,
-            player2: r['joueur2']['nom'] as String,
-          ),
-      ],
+      banners: [for (final (_, g) in recent) bannerAsset('jeu', g.game)],
+      matchups: [for (final d in details) d.matchup],
+      matchDetails: details,
       columns: const ['Joueur 1', 'Score 1', 'Score 2', 'Joueur 2', 'Jeu'],
       rows: [
-        for (final r in rows)
+        for (final d in details)
           [
-            r['joueur1']['nom'] as String,
-            '${r['score_joueur1']}',
-            '${r['score_joueur2']}',
-            r['joueur2']['nom'] as String,
-            r['jeu']['nom'] as String,
+            d.matchup.player1,
+            '${d.matchup.score1}',
+            '${d.matchup.score2}',
+            d.matchup.player2,
+            d.game,
           ],
       ],
     );
@@ -211,6 +240,10 @@ Future<RowTable> fetchRows(String table) async {
     ).wait;
     final elo = computeElo(games);
     final deltas = eloDeltas(games);
+    final forms = {
+      for (final p in players)
+        p['id'] as int: recentForm(games, p['id'] as int),
+    };
     final gameNames = {
       for (final j in boardGames) j['id'] as int: j['nom'] as String,
     };
@@ -252,6 +285,8 @@ Future<RowTable> fetchRows(String table) async {
                   game: gameNames[g.game]!,
                   place: places[i],
                   eloDelta1: deltas[i],
+                  form1: forms[g.player1]!,
+                  form2: forms[g.player2]!,
                 ),
           ],
       ],

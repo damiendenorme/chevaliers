@@ -234,7 +234,17 @@ class _MasterDetailState extends State<_MasterDetail> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _Banner(table.banner(_selected!)),
-                  _Detail(table.entries(_selected!)),
+                  // Une partie : en grand, à la place de ses colonnes.
+                  if (table.matchDetail(_selected!) case final m?)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 16,
+                      ),
+                      child: _MatchDetailLine(m, stacked: true),
+                    )
+                  else
+                    _Detail(table.entries(_selected!)),
                   // Une clé par ligne : le tri repart de zéro à chaque
                   // changement de ligne.
                   _LineList(
@@ -309,10 +319,29 @@ class _MasterLine extends StatelessWidget {
 /// le joueur 2 à droite. Le gagnant et son score sont en gras, le perdant et
 /// son score grisés ; à égalité, aucun des deux.
 class _MatchupLine extends StatelessWidget {
-  const _MatchupLine(this.m, {required this.style, this.eloDelta1});
+  const _MatchupLine(
+    this.m, {
+    required this.style,
+    this.eloDelta1,
+    this.hugScores = false,
+    this.scoreSize,
+    this.form1,
+    this.form2,
+  });
+
+  /// Pastilles des dernières parties de chaque joueur, collées du côté
+  /// extérieur de son nom (et de son évolution d'ELO). Rien si null.
+  final List<Outcome>? form1;
+  final List<Outcome>? form2;
 
   final Matchup m;
   final TextStyle style;
+
+  /// Chaque nom collé à son score, au lieu d'être aux extrémités.
+  final bool hugScores;
+
+  /// Taille des scores (et du tiret), si elle diffère de celle de [style].
+  final double? scoreSize;
 
   /// Évolution du ELO du joueur 1, affichée à gauche de son nom ; celle du
   /// joueur 2, l'opposée, à droite du sien. Rien si null.
@@ -340,33 +369,61 @@ class _MatchupLine extends StatelessWidget {
     // Les deux joueurs, puis les deux scores, ont la même largeur : le tiret
     // entre les scores reste au milieu.
     final d = eloDelta1;
+    final size = scoreSize ?? style.fontSize ?? 14;
+    TextStyle scored(TextStyle s) => s.copyWith(fontSize: size);
+    // Largeur d'un score (2 chiffres), proportionnelle à sa taille.
+    final scoreWidth = 20 * size / 14;
     return Row(
-      spacing: 8,
+      // Noms collés aux scores : un peu plus d'écart.
+      spacing: hugScores ? 16 : 8,
       children: [
         Expanded(
           child: Row(
+            mainAxisAlignment: hugScores
+                ? MainAxisAlignment.end
+                : MainAxisAlignment.start,
             spacing: 4,
             children: [
+              // Pastilles un peu à l'écart (12px avec l'espacement).
+              if (form1 case final f?)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: _Form(f),
+                ),
               if (d != null) _EloDelta(d),
               Flexible(child: text(m.player1, style: style1)),
             ],
           ),
         ),
         SizedBox(
-          width: 20,
-          child: text('${m.score1}', style: style1, align: TextAlign.right),
+          width: scoreWidth,
+          child: text(
+            '${m.score1}',
+            style: scored(style1),
+            align: TextAlign.right,
+          ),
         ),
-        Text('–', style: style),
-        SizedBox(width: 20, child: text('${m.score2}', style: style2)),
+        Text('–', style: scored(style)),
+        SizedBox(
+          width: scoreWidth,
+          child: text('${m.score2}', style: scored(style2)),
+        ),
         Expanded(
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisAlignment: hugScores
+                ? MainAxisAlignment.start
+                : MainAxisAlignment.end,
             spacing: 4,
             children: [
               Flexible(
                 child: text(m.player2, style: style2, align: TextAlign.right),
               ),
               if (d != null) _EloDelta(-d),
+              if (form2 case final f?)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: _Form(f),
+                ),
             ],
           ),
         ),
@@ -708,8 +765,6 @@ class _MatchupListState extends State<_MatchupList> {
     final matchups = widget.matchups;
     if (matchups.isEmpty) return const SizedBox.shrink();
     const dateWidth = _MatchupList.dateWidth;
-    const gameWidth = _MatchupList.gameWidth;
-    const placeWidth = _MatchupList.placeWidth;
     const divider = BorderSide(color: dividerColor);
     final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
     return Column(
@@ -759,49 +814,83 @@ class _MatchupListState extends State<_MatchupList> {
         for (final m in [for (final i in _order(matchups)) matchups[i]])
           DecoratedBox(
             decoration: BoxDecoration(border: Border(bottom: divider)),
-            child: Padding(
-              padding: _cellPadding,
-              child: Row(
-                spacing: 12,
-                children: [
-                  SizedBox(
-                    width: dateWidth,
-                    child: Text(
-                      _formatDate(m.date),
-                      style: _text.copyWith(color: labelColor),
-                      softWrap: false,
-                    ),
-                  ),
-                  SizedBox(
-                    width: gameWidth,
-                    child: Text(
-                      m.game,
-                      style: _text.copyWith(color: labelColor),
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Expanded(
-                    child: _MatchupLine(
-                      m.matchup,
-                      style: _text,
-                      eloDelta1: m.eloDelta1,
-                    ),
-                  ),
-                  SizedBox(
-                    width: placeWidth,
-                    child: Text(
-                      m.place ?? '',
-                      style: _text.copyWith(color: labelColor),
-                      textAlign: TextAlign.right,
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            child: Padding(padding: _cellPadding, child: _MatchDetailLine(m)),
           ),
+      ],
+    );
+  }
+}
+
+/// Une partie sur une ligne : la date et le jeu, puis la partie avec
+/// l'évolution du ELO de chaque joueur, et le lieu à droite.
+///
+/// Dans une liste, la date, le jeu et le lieu ont des largeurs fixes : ils
+/// restent alignés d'une ligne à l'autre. Seule ([stacked], détail d'une
+/// partie), la date, le jeu et le lieu passent l'un sous l'autre au-dessus :
+/// la partie a toute la largeur.
+class _MatchDetailLine extends StatelessWidget {
+  const _MatchDetailLine(this.m, {this.stacked = false});
+
+  final MatchDetail m;
+  final bool stacked;
+
+  @override
+  Widget build(BuildContext context) {
+    final fixed = !stacked;
+    final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    const style = _text;
+    final label = style.copyWith(color: labelColor);
+    Widget column(String text, double width, {TextAlign? align}) {
+      final child = Text(
+        text,
+        style: label,
+        textAlign: align,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+      );
+      return fixed ? SizedBox(width: width, child: child) : child;
+    }
+
+    // Seule, la partie colle chaque nom à son score, en double taille.
+    final matchup = _MatchupLine(
+      m.matchup,
+      style: style,
+      eloDelta1: m.eloDelta1,
+      hugScores: stacked,
+      scoreSize: stacked ? 28 : null,
+      form1: stacked ? m.form1 : null,
+      form2: stacked ? m.form2 : null,
+    );
+    if (!fixed) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 4,
+        children: [
+          // Un peu plus bas sous la bannière.
+          const SizedBox(height: 20),
+          // La date, le jeu et le lieu l'un sous l'autre, centrés et plus
+          // petits, puis la partie.
+          for (final info in [_formatDate(m.date), m.game, ?m.place])
+            Text(
+              info,
+              style: label.copyWith(fontSize: 12),
+              textAlign: TextAlign.center,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+            ),
+          // 36px entre le lieu et le score (avec l'espacement de la colonne).
+          const SizedBox(height: 28),
+          matchup,
+        ],
+      );
+    }
+    return Row(
+      spacing: 12,
+      children: [
+        column(_formatDate(m.date), _MatchupList.dateWidth),
+        column(m.game, _MatchupList.gameWidth),
+        Expanded(child: matchup),
+        column(m.place ?? '', _MatchupList.placeWidth, align: TextAlign.right),
       ],
     );
   }

@@ -336,6 +336,8 @@ void main() {
                   game: 'Go',
                   place: 'Aumes',
                   eloDelta1: -4.62,
+                  form1: const [],
+                  form2: const [],
                 ),
                 (
                   date: DateTime(2026, 11, 3),
@@ -348,6 +350,8 @@ void main() {
                   game: 'Awalé',
                   place: 'Frontignan',
                   eloDelta1: 3,
+                  form1: const [],
+                  form2: const [],
                 ),
               ],
               [],
