@@ -71,4 +71,36 @@ void main() {
     ]);
     expect(playerGames(elo, 9, games), isEmpty);
   });
+
+  test('recentForm gives the last 5 results, oldest first, all games', () {
+    final games = [
+      g(1, 7, 2, 1, 0), // victoire (joueur 1)
+      g(2, 3, 7, 1, 0), // défaite (joueur 2)
+      g(1, 7, 3, 2, 2), // nul
+      g(2, 4, 5, 1, 0), // sans 7
+      g(1, 2, 7, 0, 3), // victoire (joueur 2)
+      g(2, 7, 4, 0, 1), // défaite (joueur 1)
+      g(1, 5, 7, 4, 4), // nul
+    ];
+    expect(recentForm(games, 7), [
+      Outcome.loss,
+      Outcome.draw,
+      Outcome.win,
+      Outcome.loss,
+      Outcome.draw,
+    ]);
+    expect(recentForm(games, 4), [Outcome.win, Outcome.win]);
+    expect(recentForm(games, 9), isEmpty);
+  });
+
+  test('globalElo averages the ELO of the games played', () {
+    final elo = {
+      1: {7: 110.0, 8: 90.0},
+      2: {7: 95.0},
+      3: {8: 100.0},
+    };
+    expect(globalElo(elo, 7), 103); // (110 + 95) / 2 = 102,5
+    expect(globalElo(elo, 8), 95);
+    expect(globalElo(elo, 9), isNull);
+  });
 }

@@ -289,6 +289,122 @@ void main() {
     expect(find.text('Nom'), findsNothing);
   });
 
+  testWidgets('The players list header sorts by name or score', (tester) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => const RowTable(
+            columns: ['Nom'],
+            rows: [
+              ['Arthur'],
+              ['Bors'],
+              ['Gauvain'],
+              ['Lancelot'],
+            ],
+            forms: [[], [], [], []],
+            globalScores: [98, 107, null, 112],
+            sortableLists: true,
+            listForms: [
+              [
+                [Outcome.win],
+                [Outcome.loss, Outcome.loss],
+              ],
+              [],
+              [],
+              [],
+            ],
+            lists: [
+              [('Échecs', '104'), ('Dames', '92')],
+              [],
+              [],
+              [],
+            ],
+            matchLists: [
+              [(player1: 'Arthur', score1: 7, score2: 9, player2: 'Bors')],
+              [],
+              [],
+              [],
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    List<String> order() {
+      final names = ['Arthur', 'Bors', 'Gauvain', 'Lancelot'];
+      return names..sort(
+        (a, b) => tester
+            .getRect(find.text(a))
+            .top
+            .compareTo(tester.getRect(find.text(b)).top),
+      );
+    }
+
+    // Au départ, par score : du meilleur au moins bon, sans score en dernier.
+    expect(order(), ['Lancelot', 'Bors', 'Arthur', 'Gauvain']);
+    expect(
+      tester.getRect(find.text('Score')).bottom,
+      lessThanOrEqualTo(tester.getRect(find.text('Lancelot')).top),
+    );
+
+    // Clic sur « Score » : sens inverse, sans score toujours en dernier.
+    await tester.tap(find.text('Score'));
+    await tester.pump();
+    expect(order(), ['Arthur', 'Bors', 'Lancelot', 'Gauvain']);
+
+    // Retour au tri par nom, de A à Z, puis de Z à A.
+    await tester.tap(find.text('Nom'));
+    await tester.pump();
+    expect(order(), ['Arthur', 'Bors', 'Gauvain', 'Lancelot']);
+    await tester.tap(find.text('Nom'));
+    await tester.pump();
+    expect(order(), ['Lancelot', 'Gauvain', 'Bors', 'Arthur']);
+
+    // Détail : ses jeux, puis ses parties dessous, au format de la liste.
+    await tester.tap(find.text('Arthur'));
+    await tester.pump();
+    final partiesTitle = find.descendant(
+      of: find.byType(RowList),
+      matching: find.text('Parties'),
+    );
+    expect(partiesTitle, findsOneWidget);
+    final game = tester.getRect(find.text('Échecs'));
+    final title = tester.getRect(partiesTitle);
+    final score = tester.getRect(find.text('7'));
+    expect(title.top, greaterThan(game.bottom));
+    expect(score.top, greaterThan(title.bottom));
+    expect(find.text('Bors'), findsNWidgets(2));
+
+    // Pastilles par jeu dans la liste de ses jeux.
+    final semantics = tester.ensureSemantics();
+    expect(find.bySemanticsLabel('Victoire'), findsOneWidget);
+    expect(find.bySemanticsLabel('Défaite'), findsNWidgets(2));
+    semantics.dispose();
+
+    // Ses jeux se trient aussi : par score décroissant au départ, puis par
+    // nom avec l'en-tête du détail.
+    double top(String t) => tester.getRect(find.text(t)).top;
+    expect(top('Échecs'), lessThan(top('Dames')));
+    final detailHeader = find.text('Nom').last;
+    expect(
+      tester.getRect(detailHeader).bottom,
+      lessThanOrEqualTo(top('Échecs')),
+    );
+    await tester.tap(detailHeader);
+    await tester.pump();
+    expect(top('Dames'), lessThan(top('Échecs')));
+    // Le tri de la liste de gauche n'a pas bougé.
+    expect(
+      tester.getRect(find.text('Lancelot')).top,
+      lessThan(tester.getRect(find.text('Arthur').first).top),
+    );
+  });
+
   testWidgets('Hovering a button does not animate or resize it', (
     tester,
   ) async {

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'elo.dart';
@@ -10,8 +12,13 @@ class RowTable {
     required this.rows,
     this.matchups,
     this.badges,
+    this.forms,
+    this.globalScores,
+    this.matchLists,
     this.banners,
     this.lists,
+    this.sortableLists = false,
+    this.listForms,
   });
 
   final List<String> columns;
@@ -32,6 +39,24 @@ class RowTable {
 
   int? badge(int index) => badges?[index];
 
+  /// Résultats des dernières parties de chaque ligne, du plus ancien au plus
+  /// récent, en pastilles à droite de la liste (pour les joueurs).
+  final List<List<Outcome>>? forms;
+
+  List<Outcome>? form(int index) => forms?[index];
+
+  /// Score global de chaque ligne, affiché à droite des pastilles (pour les
+  /// joueurs : voir [globalElo]). Null si la ligne n'en a pas.
+  final List<int?>? globalScores;
+
+  int? globalScore(int index) => globalScores?[index];
+
+  /// Parties listées en bas du détail de chaque ligne (pour les joueurs :
+  /// les siennes, de la plus récente à la plus ancienne).
+  final List<List<Matchup>>? matchLists;
+
+  List<Matchup> matchList(int index) => matchLists?[index] ?? const [];
+
   /// Chemin d'asset de l'image de bannière de chaque ligne (voir
   /// [bannerAsset]). Le fichier peut ne pas exister.
   final List<String?>? banners;
@@ -44,12 +69,48 @@ class RowTable {
 
   List<(String, String)> list(int index) => lists?[index] ?? const [];
 
+  /// Pastilles des dernières parties de chaque élément des listes du détail
+  /// (pour les joueurs : par jeu), dans l'ordre de [lists].
+  final List<List<List<Outcome>>>? listForms;
+
+  List<List<Outcome>>? listForm(int index) => listForms?[index];
+
+  /// Les listes du détail ont un en-tête pour les trier par nom ou par
+  /// valeur (pour les joueurs : leurs jeux).
+  final bool sortableLists;
+
   /// Détail d'une ligne : chacune de ses colonnes, sauf le nom (déjà dans la
   /// liste).
   List<(String, String)> entries(int index) => [
     for (final (i, column) in columns.indexed)
       if (column != 'Nom') (column, rows[index][i]),
   ];
+}
+
+/// Résultat d'une partie pour un joueur.
+enum Outcome { win, draw, loss }
+
+/// Résultats des [count] dernières parties de [player], tous jeux confondus,
+/// du plus ancien au plus récent. [games] est dans l'ordre chronologique.
+List<Outcome> recentForm(List<EloGame> games, int player, {int count = 5}) {
+  final outcomes = [
+    for (final g in games)
+      if (g.player1 == player || g.player2 == player)
+        switch ((g.player1 == player ? 1 : -1) * g.score1.compareTo(g.score2)) {
+          > 0 => Outcome.win,
+          < 0 => Outcome.loss,
+          _ => Outcome.draw,
+        },
+  ];
+  return outcomes.sublist(max(0, outcomes.length - count));
+}
+
+/// Score global de [player] : la moyenne de ses ELO dans les jeux auxquels
+/// il a joué, arrondie. Null s'il n'a joué à aucun jeu.
+int? globalElo(Map<int, Map<int, double>> elo, int player) {
+  final ratings = [for (final perGame in elo.values) ?perGame[player]];
+  if (ratings.isEmpty) return null;
+  return (ratings.reduce((a, b) => a + b) / ratings.length).round();
 }
 
 /// Une partie dans la liste : joueur 1, scores, joueur 2.
@@ -80,7 +141,8 @@ Future<List<EloGame>> _fetchEloGames(SupabaseClient db) async {
 /// Lignes d'une table de la base, mises en colonnes.
 ///
 /// Pour `partie` : les deux joueurs, leurs scores et le jeu.
-/// Pour `joueur` : le nom et son ELO à chaque jeu auquel il a joué.
+/// Pour `joueur` : le nom, son ELO à chaque jeu auquel il a joué et ses
+/// parties.
 /// Pour `jeu` : le nom et le classement ELO des joueurs qui y ont joué.
 /// Pour les autres tables : le nom.
 Future<RowTable> fetchRows(String table) async {
@@ -131,11 +193,45 @@ Future<RowTable> fetchRows(String table) async {
     final gameNames = {
       for (final j in boardGames) j['id'] as int: j['nom'] as String,
     };
+    final playerNames = {
+      for (final p in players) p['id'] as int: p['nom'] as String,
+    };
+    final gameIds = {
+      for (final MapEntry(:key, :value) in gameNames.entries) value: key,
+    };
+    final playerLists = [
+      for (final p in players) playerGames(elo, p['id'] as int, gameNames),
+    ];
     return RowTable(
-      lists: [
-        for (final p in players) playerGames(elo, p['id'] as int, gameNames),
+      sortableLists: true,
+      // Pastilles par jeu : les 5 dernières parties du joueur à ce jeu.
+      listForms: [
+        for (final (i, p) in players.indexed)
+          [
+            for (final (name, _) in playerLists[i])
+              recentForm([
+                for (final g in games)
+                  if (g.game == gameIds[name]) g,
+              ], p['id'] as int),
+          ],
       ],
+      matchLists: [
+        for (final p in players)
+          [
+            for (final g in games.reversed)
+              if (g.player1 == p['id'] || g.player2 == p['id'])
+                (
+                  player1: playerNames[g.player1]!,
+                  score1: g.score1,
+                  score2: g.score2,
+                  player2: playerNames[g.player2]!,
+                ),
+          ],
+      ],
+      lists: playerLists,
       banners: [for (final p in players) bannerAsset(table, p['id'] as int)],
+      forms: [for (final p in players) recentForm(games, p['id'] as int)],
+      globalScores: [for (final p in players) globalElo(elo, p['id'] as int)],
       columns: const ['Nom'],
       rows: [
         for (final p in players) [p['nom'] as String],

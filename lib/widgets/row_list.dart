@@ -115,9 +115,46 @@ class _MasterDetail extends StatefulWidget {
   State<_MasterDetail> createState() => _MasterDetailState();
 }
 
+/// Colonne de tri de la liste.
+enum _SortBy { name, score }
+
 class _MasterDetailState extends State<_MasterDetail> {
   /// Ligne affichée à droite, ou null tant qu'aucune n'est choisie.
   int? _selected;
+
+  /// Tri de la liste (s'il y a des scores) : par score décroissant au
+  /// départ.
+  _SortBy _sortBy = _SortBy.score;
+  bool _ascending = false;
+
+  /// Cliquer sur la colonne déjà triée inverse le sens ; sur l'autre, trie
+  /// par nom de A à Z, ou par score du meilleur au moins bon.
+  void _sort(_SortBy by) {
+    setState(() {
+      _ascending = by == _sortBy ? !_ascending : by == _SortBy.name;
+      _sortBy = by;
+    });
+  }
+
+  /// Positions des lignes dans l'ordre affiché. Sans score, toujours en
+  /// dernier.
+  List<int> _order(RowTable table) {
+    final order = [for (var i = 0; i < table.rows.length; i++) i];
+    if (table.globalScores == null) return order;
+    final direction = _ascending ? 1 : -1;
+    return order..sort((a, b) {
+      if (_sortBy == _SortBy.score) {
+        final (sa, sb) = (table.globalScore(a), table.globalScore(b));
+        if (sa == null || sb == null) {
+          if (sa != sb) return sa == null ? 1 : -1;
+        } else if (sa != sb) {
+          return direction * sa.compareTo(sb);
+        }
+      }
+      return (_sortBy == _SortBy.name ? direction : 1) *
+          table.title(a).compareTo(table.title(b));
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -126,33 +163,63 @@ class _MasterDetailState extends State<_MasterDetail> {
       color: Theme.of(context).scaffoldBackgroundColor,
     );
 
-    return _Cards(
-      master: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < table.rows.length; i++)
-              Material(
-                color: i == _selected ? accentColor : topBarColor,
-                shape: Border(bottom: divider),
-                child: InkWell(
-                  onTap: () => setState(() => _selected = i),
-                  hoverColor: hoverColor,
-                  child: Padding(
-                    padding: _cellPadding,
-                    child: _MasterLine(
-                      table,
-                      i,
-                      style: i == _selected
-                          ? _text.copyWith(color: Colors.white)
-                          : _text,
-                    ),
+    final list = SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final i in _order(table))
+            Material(
+              color: i == _selected ? accentColor : topBarColor,
+              shape: Border(bottom: divider),
+              child: InkWell(
+                onTap: () => setState(() => _selected = i),
+                hoverColor: hoverColor,
+                child: Padding(
+                  padding: _cellPadding,
+                  child: _MasterLine(
+                    table,
+                    i,
+                    style: i == _selected
+                        ? _text.copyWith(color: Colors.white)
+                        : _text,
                   ),
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
+    );
+
+    return _Cards(
+      // Avec des scores : un en-tête fixe au-dessus de la liste, pour la
+      // trier par nom ou par score.
+      master: table.globalScores == null
+          ? list
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(border: Border(bottom: divider)),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _SortHeader(
+                          'Nom',
+                          arrow: _sortBy == _SortBy.name ? _ascending : null,
+                          onTap: () => _sort(_SortBy.name),
+                        ),
+                      ),
+                      _SortHeader(
+                        'Score',
+                        arrow: _sortBy == _SortBy.score ? _ascending : null,
+                        onTap: () => _sort(_SortBy.score),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(child: list),
+              ],
+            ),
       detail: _selected == null
           ? null
           : SingleChildScrollView(
@@ -161,7 +228,15 @@ class _MasterDetailState extends State<_MasterDetail> {
                 children: [
                   _Banner(table.banner(_selected!)),
                   _Detail(table.entries(_selected!)),
-                  _LineList(table.list(_selected!)),
+                  // Une clé par ligne : le tri repart de zéro à chaque
+                  // changement de ligne.
+                  _LineList(
+                    key: ValueKey(_selected),
+                    table.list(_selected!),
+                    sortable: table.sortableLists,
+                    forms: table.listForm(_selected!),
+                  ),
+                  _MatchupList(table.matchList(_selected!)),
                 ],
               ),
             ),
@@ -169,10 +244,8 @@ class _MasterDetailState extends State<_MasterDetail> {
   }
 }
 
-/// Contenu d'une ligne de la liste : son libellé, ou pour une partie, le
-/// joueur 1 à gauche, les scores au milieu et le joueur 2 à droite. Le
-/// gagnant et son score sont en gras, le perdant et son score grisés ; à
-/// égalité, aucun des deux.
+/// Contenu d'une ligne de la liste : son libellé (avec pastille, ou forme et
+/// score), ou pour une partie, voir [_MatchupLine].
 class _MasterLine extends StatelessWidget {
   const _MasterLine(this.table, this.index, {required this.style});
 
@@ -201,7 +274,45 @@ class _MasterLine extends StatelessWidget {
         ],
       );
     }
+    final form = table.form(index);
+    if (m == null && form != null) {
+      final score = table.globalScore(index);
+      return Row(
+        spacing: 8,
+        children: [
+          Expanded(child: text(table.title(index))),
+          _Form(form),
+          // Largeur fixe : les scores restent alignés d'une ligne à l'autre.
+          SizedBox(
+            width: 28,
+            child: text(score?.toString() ?? '', align: TextAlign.right),
+          ),
+        ],
+      );
+    }
     if (m == null) return text(table.title(index));
+    return _MatchupLine(m, style: style);
+  }
+}
+
+/// Une partie sur une ligne : le joueur 1 à gauche, les scores au milieu et
+/// le joueur 2 à droite. Le gagnant et son score sont en gras, le perdant et
+/// son score grisés ; à égalité, aucun des deux.
+class _MatchupLine extends StatelessWidget {
+  const _MatchupLine(this.m, {required this.style});
+
+  final Matchup m;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    Text text(String value, {TextStyle? style, TextAlign? align}) => Text(
+      value,
+      style: style ?? this.style,
+      textAlign: align,
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
+    );
 
     final color = style.color ?? DefaultTextStyle.of(context).style.color!;
     final winner = style.copyWith(fontWeight: FontWeight.bold);
@@ -227,6 +338,82 @@ class _MasterLine extends StatelessWidget {
         Expanded(
           child: text(m.player2, style: style2, align: TextAlign.right),
         ),
+      ],
+    );
+  }
+}
+
+/// Titre de colonne cliquable, pour trier la liste. [arrow] : flèche vers le
+/// haut (true) ou le bas (false) sur la colonne triée, rien sur l'autre.
+class _SortHeader extends StatelessWidget {
+  const _SortHeader(this.label, {required this.arrow, required this.onTap});
+
+  final String label;
+  final bool? arrow;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.onSurfaceVariant;
+    final style = _text.copyWith(fontSize: 12, color: color);
+    return InkWell(
+      onTap: onTap,
+      hoverColor: hoverColor,
+      child: Padding(
+        padding: _cellPadding,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: 2,
+          children: [
+            Text(label, style: style),
+            if (arrow != null)
+              Icon(
+                arrow! ? Icons.arrow_upward : Icons.arrow_downward,
+                size: 12,
+                color: color,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Pastilles des dernières parties, de la plus ancienne à la plus récente :
+/// vertes pour les victoires, grises pour les nuls, rouges pour les défaites.
+class _Form extends StatelessWidget {
+  const _Form(this.outcomes);
+
+  static const double dot = 8;
+
+  final List<Outcome> outcomes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: 3,
+      children: [
+        for (final o in outcomes)
+          Semantics(
+            label: switch (o) {
+              Outcome.win => 'Victoire',
+              Outcome.draw => 'Nul',
+              Outcome.loss => 'Défaite',
+            },
+            child: Container(
+              width: dot,
+              height: dot,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: switch (o) {
+                  Outcome.win => const Color(0xFF2E9E4F),
+                  Outcome.draw => const Color(0xFF9AA0A6),
+                  Outcome.loss => const Color(0xFFD93025),
+                },
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -286,10 +473,52 @@ class _Banner extends StatelessWidget {
 
 /// Liste au style de la liste de gauche : une ligne par élément, son libellé
 /// à gauche et sa valeur à droite.
-class _LineList extends StatelessWidget {
-  const _LineList(this.lines);
+class _LineList extends StatefulWidget {
+  const _LineList(this.lines, {super.key, this.sortable = false, this.forms});
 
   final List<(String, String)> lines;
+
+  /// Pastilles des dernières parties de chaque ligne (même ordre que
+  /// [lines]), affichées avant la valeur.
+  final List<List<Outcome>>? forms;
+
+  /// Ajoute un en-tête pour trier par nom ou par valeur (numérique). Les
+  /// lignes arrivent triées par valeur décroissante, le tri de départ.
+  final bool sortable;
+
+  @override
+  State<_LineList> createState() => _LineListState();
+}
+
+class _LineListState extends State<_LineList> {
+  _SortBy _sortBy = _SortBy.score;
+  bool _ascending = false;
+
+  /// Comme l'en-tête de la liste de gauche : la colonne déjà triée inverse
+  /// le sens ; l'autre trie par nom de A à Z, ou par valeur décroissante.
+  void _sort(_SortBy by) {
+    setState(() {
+      _ascending = by == _sortBy ? !_ascending : by == _SortBy.name;
+      _sortBy = by;
+    });
+  }
+
+  /// Positions des lignes dans l'ordre affiché.
+  List<int> get _order {
+    final lines = widget.lines;
+    final order = [for (var i = 0; i < lines.length; i++) i];
+    if (!widget.sortable) return order;
+    final direction = _ascending ? 1 : -1;
+    return order..sort((i, j) {
+      final (a, b) = (lines[i], lines[j]);
+      if (_sortBy == _SortBy.score) {
+        final byValue = num.parse(a.$2).compareTo(num.parse(b.$2));
+        if (byValue != 0) return direction * byValue;
+        return a.$1.compareTo(b.$1);
+      }
+      return direction * a.$1.compareTo(b.$1);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -299,24 +528,96 @@ class _LineList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final (name, value) in lines)
+        if (widget.sortable && widget.lines.isNotEmpty)
+          DecoratedBox(
+            decoration: BoxDecoration(border: Border(bottom: divider)),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _SortHeader(
+                    'Nom',
+                    arrow: _sortBy == _SortBy.name ? _ascending : null,
+                    onTap: () => _sort(_SortBy.name),
+                  ),
+                ),
+                _SortHeader(
+                  'Score',
+                  arrow: _sortBy == _SortBy.score ? _ascending : null,
+                  onTap: () => _sort(_SortBy.score),
+                ),
+              ],
+            ),
+          ),
+        for (final i in _order)
           DecoratedBox(
             decoration: BoxDecoration(border: Border(bottom: divider)),
             child: Padding(
               padding: _cellPadding,
               child: Row(
+                spacing: 8,
                 children: [
                   Expanded(
                     child: Text(
-                      name,
+                      widget.lines[i].$1,
                       style: _text,
                       softWrap: false,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Text(value, style: _text),
+                  if (widget.forms case final forms?) ...[
+                    _Form(forms[i]),
+                    // Largeur fixe, comme dans la liste de gauche : les
+                    // valeurs restent alignées.
+                    SizedBox(
+                      width: 28,
+                      child: Text(
+                        widget.lines[i].$2,
+                        style: _text,
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                  ] else
+                    Text(widget.lines[i].$2, style: _text),
                 ],
               ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Liste de parties, au style de la liste de gauche, sous un petit titre.
+/// Rien si la liste est vide.
+class _MatchupList extends StatelessWidget {
+  const _MatchupList(this.matchups);
+
+  final List<Matchup> matchups;
+
+  @override
+  Widget build(BuildContext context) {
+    if (matchups.isEmpty) return const SizedBox.shrink();
+    final divider = BorderSide(
+      color: Theme.of(context).scaffoldBackgroundColor,
+    );
+    final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          // Un large espace au-dessus, pour la séparer de la liste précédente.
+          padding: const EdgeInsets.fromLTRB(12, 32, 12, 4),
+          child: Text(
+            'Parties',
+            style: _text.copyWith(fontSize: 12, color: labelColor),
+          ),
+        ),
+        for (final m in matchups)
+          DecoratedBox(
+            decoration: BoxDecoration(border: Border(bottom: divider)),
+            child: Padding(
+              padding: _cellPadding,
+              child: _MatchupLine(m, style: _text),
             ),
           ),
       ],
