@@ -124,4 +124,9 @@ void main() {
       'Go',
     ]);
   });
+
+  test('formatMonth shows the month and year only', () {
+    expect(formatMonth(DateTime(2027, 12)), 'Décembre 2027');
+    expect(formatMonth(DateTime(2026, 8, 15)), 'Août 2026');
+  });
 }

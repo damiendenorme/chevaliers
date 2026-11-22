@@ -333,7 +333,7 @@ class _MasterLine extends StatelessWidget {
         spacing: 8,
         children: [
           Expanded(child: text(table.title(index))),
-          text(date == null ? '—' : formatDate(date)),
+          text(date == null ? '—' : formatMonth(date)),
         ],
       );
     }

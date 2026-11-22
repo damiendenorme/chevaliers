@@ -594,8 +594,8 @@ void main() {
           loadRows: (_) async => RowTable(
             columns: const ['Nom', 'Date'],
             rows: const [
-              ['Automne', '12/10/26'],
-              ['Été', '05/07/27'],
+              ['Automne', 'Octobre 2026'],
+              ['Été', 'Juillet 2027'],
               ['Printemps', '—'],
             ],
             dates: [DateTime(2026, 10, 12), DateTime(2027, 7, 5), null],
@@ -616,7 +616,8 @@ void main() {
 
     // La date à droite du nom, sur la même ligne.
     final name = tester.getRect(find.text('Automne'));
-    final date = tester.getRect(find.text('12/10/26'));
+    // Mois et année, sans le jour.
+    final date = tester.getRect(find.text('Octobre 2026'));
     expect(date.left, greaterThan(name.right));
     expect(date.center.dy, name.center.dy);
 

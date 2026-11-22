@@ -418,7 +418,7 @@ Future<RowTable> fetchRows(String table) async {
         for (final (i, r) in rows.indexed)
           [
             r['nom'] as String,
-            if (dates[i] case final d?) formatDate(d) else '—',
+            if (dates[i] case final d?) formatMonth(d) else '—',
           ],
       ],
     );
@@ -526,3 +526,21 @@ String formatDate(DateTime date) {
   String two(int n) => n.toString().padLeft(2, '0');
   return '${two(d.day)}/${two(d.month)}/${two(d.year % 100)}';
 }
+
+const _months = [
+  'Janvier',
+  'Février',
+  'Mars',
+  'Avril',
+  'Mai',
+  'Juin',
+  'Juillet',
+  'Août',
+  'Septembre',
+  'Octobre',
+  'Novembre',
+  'Décembre',
+];
+
+/// Mois et année, sans le jour : « Décembre 2027 » (dates d'événements).
+String formatMonth(DateTime date) => '${_months[date.month - 1]} ${date.year}';
