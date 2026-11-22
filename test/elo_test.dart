@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chevaliers/data/elo.dart';
 import 'package:chevaliers/data/rows.dart';
+import 'package:chevaliers/data/rpg_rows.dart';
 
 EloGame g(int game, int p1, int p2, int s1, int s2) =>
     (game: game, player1: p1, player2: p2, score1: s1, score2: s2);
@@ -155,5 +156,21 @@ void main() {
     expect(elo[1]![1], 50);
     expect(elo[1]![2], -50);
     expect(globalElo(computeElo([], start: rpgEloStart), 1), isNull);
+  });
+
+  test('rpgSessionTitle: date, scenario, event and its order number', () {
+    expect(
+      rpgSessionTitle(
+        DateTime(2026, 11, 28),
+        scenario: 'La Tombe de M. Eustache',
+        event: ('Paris Éternité', 1),
+      ),
+      '28.11.2026 La Tombe de M. Eustache (Paris Éternité 1)',
+    );
+    expect(rpgSessionTitle(DateTime(2026, 3, 5)), '05.03.2026');
+    expect(
+      rpgSessionTitle(DateTime(2026, 3, 5), event: ('Trench Crusade', 2)),
+      '05.03.2026 (Trench Crusade 2)',
+    );
   });
 }

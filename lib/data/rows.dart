@@ -24,6 +24,7 @@ class RowTable {
     this.fullDates = false,
     this.playerBanners,
     this.sessionDetails,
+    this.sessionLines,
     this.banners,
     this.lists,
     this.sortableLists = false,
@@ -111,6 +112,13 @@ class RowTable {
   final List<SessionDetail>? sessionDetails;
 
   SessionDetail? sessionDetail(int index) => sessionDetails?[index];
+
+  /// Parties de JDR listées dans le détail de chaque ligne (pour un jeu) :
+  /// leur libellé, avec les bannières de leur MJ et de leurs joueurs.
+  final List<List<SessionLine>>? sessionLines;
+
+  List<SessionLine> sessionLinesOf(int index) =>
+      sessionLines?[index] ?? const [];
 
   /// Dates affichées en entier (jour, mois, année) au lieu du mois et de
   /// l'année (parties de JDR).
@@ -222,13 +230,21 @@ List<MatchDetail> _matchDetails({
   ];
 }
 
-/// Une partie de JDR détaillée : sa date, son jeu, son lieu et son
-/// événement (facultatifs), son MJ et ses invités (id, nom).
+/// Une partie de JDR détaillée : sa date, son scénario, son événement et son
+/// lieu (facultatifs), son MJ et ses joueurs (id, nom).
 typedef SessionDetail = ({
   DateTime date,
-  String game,
+  String? scenario,
   String? place,
   String? event,
+  (int, String)? gm,
+  List<(int, String)> guests,
+});
+
+/// Une partie de JDR sur une ligne : son libellé (la date), puis son MJ et
+/// ses joueurs (id, nom).
+typedef SessionLine = ({
+  String label,
   (int, String)? gm,
   List<(int, String)> guests,
 });

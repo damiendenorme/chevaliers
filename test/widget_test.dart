@@ -10,6 +10,7 @@ import 'package:chevaliers/data/rows.dart';
 import 'package:chevaliers/data/rpg_rows.dart';
 import 'package:chevaliers/main.dart';
 import 'package:chevaliers/widgets/row_list.dart';
+import 'package:chevaliers/widgets/rpg_party_dialog.dart';
 import 'package:chevaliers/widgets/section_buttons.dart';
 import 'package:chevaliers/widgets/top_bar.dart';
 
@@ -1356,7 +1357,13 @@ void main() {
     await tester.tap(find.byType(AddButton));
     await tester.pumpAndSettle();
     expect(find.text('Nouvelle partie'), findsOneWidget);
-    expect(find.text('Joueurs invités'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(RpgPartyDialog),
+        matching: find.text('Joueurs'),
+      ),
+      findsOneWidget,
+    );
     // Date complète, aujourd'hui par défaut.
     expect(
       find.text('Date : ${formatFullDate(DateTime.now())}'),
@@ -1379,18 +1386,23 @@ void main() {
 
     await choose('Jeu', 'Pendragon');
     await choose('MJ', 'Merlin');
-    // Le MJ n'est pas proposé parmi les invités.
+    // Le MJ n'est pas proposé parmi les joueurs.
     expect(find.widgetWithText(FilterChip, 'Merlin'), findsNothing);
     await tester.tap(find.widgetWithText(FilterChip, 'Morgane'));
     await tester.tap(find.widgetWithText(FilterChip, 'Perceval'));
     await tester.pump();
     await choose('Événement (facultatif)', 'Trench Crusade');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Scénario (facultatif)'),
+      'La Tombe de M. Eustache',
+    );
     await tester.tap(find.text('Ajouter'));
     await tester.pumpAndSettle();
 
     expect(find.text('Nouvelle partie'), findsNothing);
     final p = parties.single;
     expect((p.game, p.gm, p.place, p.event), (4, 1, null, 6));
+    expect(p.scenario, 'La Tombe de M. Eustache');
     expect(p.guests..sort(), [2, 3]);
     expect(p.date, DateUtils.dateOnly(DateTime.now()));
   });
@@ -1437,7 +1449,7 @@ void main() {
     );
   });
 
-  testWidgets('An RPG party detail centers the GM, guests below', (
+  testWidgets('An RPG party detail: date, scenario, place, then players', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1400, 800);
@@ -1457,9 +1469,9 @@ void main() {
             sessionDetails: [
               (
                 date: DateTime(2026, 11, 21),
-                game: 'Pendragon',
+                scenario: 'La Tombe de M. Eustache',
                 place: 'Aumes',
-                event: null,
+                event: 'Paris Éternité',
                 gm: (1, 'Merlin'),
                 guests: [(2, 'Morgane'), (3, 'Perceval')],
               ),
@@ -1473,25 +1485,69 @@ void main() {
     await tester.tap(find.text('Pendragon'));
     await tester.pumpAndSettle();
 
-    final card = tester.getRect(find.byType(RowList));
-    final detailCenter =
-        (card.left + RowList.listWidth + RowList.gap + card.right) / 2;
+    double top(String t) => tester.getRect(find.text(t).last).top;
+    // Pas le nom du jeu dans le détail (seulement dans la liste).
+    expect(find.text('Pendragon'), findsOneWidget);
+    // La date, le scénario dessous, l'événement, le lieu en dernier.
+    expect(top('La Tombe de M. Eustache'), greaterThan(top('21/11/2026')));
+    expect(top('Paris Éternité'), greaterThan(top('La Tombe de M. Eustache')));
+    expect(top('Aumes'), greaterThan(top('Paris Éternité')));
+    // Puis la liste des joueurs : le MJ d'abord, avec sa bannière.
+    expect(top('Merlin'), greaterThan(top('Aumes')));
+    expect(top('Morgane'), greaterThan(top('Merlin')));
+    expect(top('Perceval'), greaterThan(top('Morgane')));
+    expect(find.text('MJ'), findsOneWidget);
+    // À droite des autres lignes : « Joueur ».
+    expect(find.text('Joueur'), findsNWidgets(2));
+    final banner = tester.getRect(find.text('1'));
+    final merlin = tester.getRect(find.text('Merlin'));
+    expect(banner.right, lessThan(merlin.left));
+    expect(banner.center.dy, moreOrLessEquals(merlin.center.dy, epsilon: 2));
+  });
+
+  testWidgets('An RPG game detail lists parties with GM and guest banners', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRpgRows: (_) async => const RowTable(
+            columns: ['Nom'],
+            rows: [
+              ['Pendragon'],
+            ],
+            sessionLines: [
+              [
+                (
+                  label: '21/11/2026',
+                  gm: (1, 'Merlin'),
+                  guests: [(2, 'Morgane'), (3, 'Perceval')],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('RPG'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pendragon'));
+    await tester.pumpAndSettle();
+
+    // La date à gauche ; à droite, le MJ puis les joueurs, sans « MJ : ».
+    final date = tester.getRect(find.text('21/11/2026'));
     final gm = tester.getRect(find.text('1'));
     final guest2 = tester.getRect(find.text('2'));
     final guest3 = tester.getRect(find.text('3'));
-    final place = tester.getRect(find.text('Aumes'));
-    // Date, jeu et lieu au-dessus ; le MJ centré ; les invités dessous,
-    // centrés ensemble.
-    expect(find.text('21/11/2026'), findsNWidgets(2)); // liste et détail
-    expect(gm.top, greaterThan(place.bottom));
-    expect(gm.center.dx, moreOrLessEquals(detailCenter, epsilon: 1));
-    expect(guest2.top, greaterThan(gm.bottom));
-    expect(guest3.center.dy, guest2.center.dy);
-    expect(
-      (guest2.left + guest3.right) / 2,
-      moreOrLessEquals(detailCenter, epsilon: 2),
-    );
-    expect(find.text('Merlin'), findsNothing);
+    expect(find.textContaining('MJ'), findsNothing);
+    expect(gm.left, greaterThan(date.right));
+    expect(guest2.left, greaterThan(gm.right));
+    expect(guest3.left, greaterThan(guest2.right));
+    expect(gm.center.dy, moreOrLessEquals(date.center.dy, epsilon: 2));
   });
 
   testWidgets('Hovering a button does not animate or resize it', (

@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'elo.dart';
 import 'rows.dart';
 
-/// Une partie de JDR : un jeu, un meneur (MJ), des joueurs invités, un lieu
+/// Une partie de JDR : un jeu, un meneur (MJ), des joueurs, un lieu
 /// et un événement facultatifs, et une date (jour).
 typedef RpgSession = ({
   int id,
@@ -13,6 +13,7 @@ typedef RpgSession = ({
   List<int> guests,
   String? place,
   int? event,
+  String? scenario,
 });
 
 /// Lignes d'une table JDR (préfixe rpg_), pour les parties, les joueurs, les
@@ -33,8 +34,8 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
     db
         .from('rpg_partie')
         .select(
-          'id, date, jeu_id, mj_id, evenement_id, place:lieu_id(nom), '
-          'rpg_partie_joueur(joueur_id)',
+          'id, date, jeu_id, mj_id, evenement_id, scenario, '
+          'place:lieu_id(nom), rpg_partie_joueur(joueur_id)',
         )
         .order('date', ascending: false)
         .order('id', ascending: false),
@@ -58,12 +59,33 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
         ],
         place: r['place']?['nom'] as String?,
         event: r['evenement_id'] as int?,
+        scenario: r['scenario'] as String?,
       ),
   ];
+  // Numéro d'ordre de chaque partie dans son événement (1, 2…), par date.
+  final eventOrder = <int, int>{};
+  final perEvent = <int, int>{};
+  for (final s in sessions.reversed) {
+    if (s.event case final e?) {
+      eventOrder[s.id] = perEvent[e] = (perEvent[e] ?? 0) + 1;
+    }
+  }
+
   String nameOf(int? id) => id == null ? '—' : playerNames[id] ?? '—';
 
-  /// « 21/11/26 · Nom du jeu ».
-  String label(RpgSession s) => '${formatDate(s.date)} · ${gameNames[s.game]}';
+  String sessionTitle(RpgSession s) => rpgSessionTitle(
+    s.date,
+    scenario: s.scenario,
+    event: s.event == null ? null : (eventNames[s.event]!, eventOrder[s.id]!),
+  );
+
+  /// Une partie sur une ligne : son titre, avec son MJ et ses joueurs.
+  SessionLine sessionLine(RpgSession s) => (
+    label: sessionTitle(s),
+    gm: s.gm == null ? null : (s.gm!, nameOf(s.gm)),
+    guests: [for (final p in s.guests) (p, nameOf(p))]
+      ..sort((a, b) => compareNames(a.$2, b.$2)),
+  );
 
   switch (table) {
     case 'partie':
@@ -80,7 +102,7 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
       }
       return RowTable(
         // Le jeu dans la liste, avec la date complète à droite.
-        columns: const ['Jeu', 'MJ', 'Invités', 'Lieu', 'Événement', 'Date'],
+        columns: const ['Jeu', 'MJ', 'Joueurs', 'Lieu', 'Événement', 'Date'],
         rows: [
           for (final s in sessions)
             [
@@ -105,7 +127,7 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
           for (final s in sessions)
             (
               date: s.date,
-              game: gameNames[s.game] ?? '—',
+              scenario: s.scenario,
               place: s.place,
               event: s.event == null ? null : eventNames[s.event],
               gm: s.gm == null ? null : (s.gm!, nameOf(s.gm)),
@@ -130,13 +152,14 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
         forms: [for (final _ in sorted) const []],
         globalScores: [for (final _ in sorted) rpgEloStart.round()],
         globalScoreLabel: 'Gloire',
-        // Ses parties : comme MJ ou comme invité.
-        lists: [
+        // Ses parties (comme MJ ou comme joueur), comme dans le détail d'un
+        // jeu : date, scénario, événement, et les bannières des joueurs.
+        sessionLines: [
           for (final p in sorted)
             [
               for (final s in sessions)
                 if (s.gm == p['id'] || s.guests.contains(p['id']))
-                  (label(s), s.gm == p['id'] ? 'MJ' : 'Invité'),
+                  sessionLine(s),
             ],
         ],
       );
@@ -157,7 +180,7 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
           for (final e in sorted) bannerAsset('rpg_evenement', e['id'] as int),
         ],
         // Les joueurs ayant joué au moins une fois à l'événement (MJ ou
-        // invités), par nom.
+        // joueurs), par nom.
         playerBanners: [
           for (final e in sorted)
             ([
@@ -180,7 +203,7 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
         banners: [
           for (final g in sorted) bannerAsset('rpg_jeu', g['id'] as int),
         ],
-        // Nombre de joueurs différents (MJ et invités) à ce jeu.
+        // Nombre de joueurs différents (MJ et joueurs) à ce jeu.
         badges: [
           for (final g in sorted)
             {
@@ -188,17 +211,33 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
                 if (s.game == g['id']) ...[?s.gm, ...s.guests],
             }.length,
         ],
-        // Ses parties, avec leur MJ.
-        lists: [
+        // Ses parties : date, scénario et événement (avec son numéro
+        // d'ordre), avec les bannières du MJ et des joueurs.
+        sessionLines: [
           for (final g in sorted)
             [
               for (final s in sessions)
-                if (s.game == g['id'])
-                  (formatFullDate(s.date), 'MJ : ${nameOf(s.gm)}'),
+                if (s.game == g['id']) sessionLine(s),
             ],
         ],
       );
   }
+}
+
+/// « 28.11.2026 La Tombe de M. Eustache (Paris Éternité 1) » : la date, le
+/// scénario et l'événement (nom, numéro d'ordre de la partie dans
+/// l'événement), s'il y en a.
+String rpgSessionTitle(
+  DateTime date, {
+  String? scenario,
+  (String, int)? event,
+}) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return [
+    '${two(date.day)}.${two(date.month)}.${date.year}',
+    ?scenario,
+    if (event case (final name, final order)) '($name $order)',
+  ].join(' ');
 }
 
 /// Choix possibles pour une nouvelle partie de JDR (id, nom), par nom.
@@ -235,10 +274,11 @@ typedef NewRpgParty = ({
   List<int> guests,
   int? place,
   int? event,
+  String? scenario,
   DateTime date,
 });
 
-/// Ajoute une partie de JDR et ses invités (backoffice : réservé aux
+/// Ajoute une partie de JDR et ses joueurs (backoffice : réservé aux
 /// connectés).
 Future<void> addRpgParty(NewRpgParty party) async {
   final db = Supabase.instance.client;
@@ -251,6 +291,7 @@ Future<void> addRpgParty(NewRpgParty party) async {
         'mj_id': party.gm,
         'lieu_id': ?party.place,
         'evenement_id': ?party.event,
+        'scenario': ?party.scenario,
         'date': '${d.year}-${two(d.month)}-${two(d.day)}',
       })
       .select('id')

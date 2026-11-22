@@ -1,4 +1,4 @@
--- Parties de JDR : un jeu, un meneur de jeu (MJ), des joueurs invités, un lieu
+-- Parties de JDR : un jeu, un meneur de jeu (MJ), des joueurs, un lieu
 -- et un événement facultatifs, et une date (jour). Pas de joueur 1/2 ni de
 -- score. (Aucune partie JDR n'existait encore.)
 
@@ -16,7 +16,7 @@ alter table public.rpg_partie
   alter column score_joueur1 drop not null,
   alter column score_joueur2 drop not null;
 
--- Joueurs invités d'une partie de JDR (plusieurs).
+-- Joueurs d'une partie de JDR (plusieurs).
 create table public.rpg_partie_joueur (
   partie_id bigint not null references public.rpg_partie (id) on delete cascade,
   joueur_id bigint not null references public.rpg_joueur (id),

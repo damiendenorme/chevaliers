@@ -5,7 +5,7 @@ import '../data/rpg_rows.dart';
 import 'top_bar.dart';
 
 /// Fenêtre au design des cartes pour ajouter une partie de JDR : le jeu et
-/// le MJ (obligatoires), les joueurs invités (plusieurs), le lieu et
+/// le MJ (obligatoires), le scénario (facultatif), les joueurs (plusieurs), le lieu et
 /// l'événement (facultatifs), et la date (jour, mois, année ; aujourd'hui par
 /// défaut). Appelle [onSubmit], puis se ferme ; affiche l'erreur sinon.
 class RpgPartyDialog extends StatefulWidget {
@@ -28,9 +28,16 @@ class _RpgPartyDialogState extends State<RpgPartyDialog> {
   final _guests = <int>{};
   int? _place;
   int? _event;
+  final _scenario = TextEditingController();
   DateTime _date = DateUtils.dateOnly(DateTime.now());
   bool _busy = false;
   String? _error;
+
+  @override
+  void dispose() {
+    _scenario.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
@@ -61,13 +68,14 @@ class _RpgPartyDialogState extends State<RpgPartyDialog> {
       await widget.onSubmit((
         game: _game!,
         gm: _gm!,
-        // Le MJ n'est pas compté parmi les invités.
+        // Le MJ n'est pas compté parmi les joueurs.
         guests: [
           for (final g in _guests)
             if (g != _gm) g,
         ],
         place: _place,
         event: _event,
+        scenario: _scenario.text.trim().isEmpty ? null : _scenario.text.trim(),
         date: _date,
       ));
       if (mounted) Navigator.of(context).pop();
@@ -146,15 +154,22 @@ class _RpgPartyDialogState extends State<RpgPartyDialog> {
                         value: _game,
                         onChanged: (id) => setState(() => _game = id),
                       ),
+                      TextField(
+                        controller: _scenario,
+                        decoration: const InputDecoration(
+                          labelText: 'Scénario (facultatif)',
+                        ),
+                        enabled: !_busy,
+                      ),
                       _picker(
                         label: 'MJ',
                         items: options.players,
                         value: _gm,
                         onChanged: (id) => setState(() => _gm = id),
                       ),
-                      // Invités : plusieurs, à cocher (le MJ exclu).
+                      // Joueurs : plusieurs, à cocher (le MJ exclu).
                       Text(
-                        'Joueurs invités',
+                        'Joueurs',
                         style: TextStyle(fontSize: 12, color: muted),
                       ),
                       Wrap(

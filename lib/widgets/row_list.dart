@@ -397,16 +397,15 @@ class _MasterDetailState extends State<_MasterDetail> {
                           child: _MatchDetailLine(m, stacked: true),
                         )
                       else if (table.sessionDetail(_selected!) case final s?)
+                        // Sa liste de joueurs occupe toute la largeur.
                         Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 16,
-                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
                           child: _SessionDetail(s),
                         )
                       else
                         _Detail(table.entries(_selected!)),
                       _PlayerBanners(table.playerBannersOf(_selected!)),
+                      _SessionLines(table.sessionLinesOf(_selected!)),
                       // Une clé par ligne : le tri repart de zéro à chaque
                       // changement de ligne.
                       _LineList(
@@ -720,10 +719,9 @@ class _SortHeader extends StatelessWidget {
   }
 }
 
-/// Une partie de JDR, à la manière d'une partie de Wargame : la date, le jeu,
-/// le lieu et l'événement l'un sous l'autre, centrés et plus petits ; puis,
-/// centrées, la bannière du MJ, et dessous celles des invités. Le nom de
-/// chacun s'affiche au survol de sa bannière.
+/// Une partie de JDR : la date, le scénario, l'événement puis le lieu, l'un
+/// sous l'autre, centrés et plus petits ; puis la liste de ses joueurs, le
+/// MJ en premier, chacun avec la bannière de son id, au style des listes.
 class _SessionDetail extends StatelessWidget {
   const _SessionDetail(this.s);
 
@@ -732,9 +730,30 @@ class _SessionDetail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
-    Widget banner((int, String) player) => Tooltip(
-      message: player.$2,
-      child: _IdBanner(player.$1, scale: _IdBanner.detailScale),
+    const divider = BorderSide(color: dividerColor);
+    Widget player((int, String) p, {bool gm = false}) => DecoratedBox(
+      decoration: const BoxDecoration(border: Border(bottom: divider)),
+      child: Padding(
+        padding: _cellPadding,
+        child: Row(
+          spacing: 10,
+          children: [
+            _IdBanner(p.$1),
+            Expanded(
+              child: Text(
+                p.$2,
+                style: _text,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Text(
+              gm ? 'MJ' : 'Joueur',
+              style: _text.copyWith(fontSize: 12, color: labelColor),
+            ),
+          ],
+        ),
+      ),
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -742,7 +761,12 @@ class _SessionDetail extends StatelessWidget {
       children: [
         // Un peu plus bas sous la bannière, comme une partie de Wargame.
         const SizedBox(height: 20),
-        for (final info in [formatFullDate(s.date), s.game, ?s.place, ?s.event])
+        for (final info in [
+          formatFullDate(s.date),
+          ?s.scenario,
+          ?s.event,
+          ?s.place,
+        ])
           Text(
             info,
             style: _text.copyWith(fontSize: 12, color: labelColor),
@@ -751,15 +775,63 @@ class _SessionDetail extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         const SizedBox(height: 28),
-        // Le MJ, puis ses invités.
-        if (s.gm case final gm?) Center(child: banner(gm)),
-        const SizedBox(height: 8),
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 8,
-          runSpacing: 8,
-          children: [for (final g in s.guests) banner(g)],
+        // Les joueurs : le MJ, puis les joueurs.
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (s.gm case final gm?) player(gm, gm: true),
+            for (final g in s.guests) player(g),
+          ],
         ),
+      ],
+    );
+  }
+}
+
+/// Parties de JDR, au style de la liste de gauche : une ligne par partie, sa
+/// date à gauche, à droite la bannière de son MJ puis, un peu à l'écart,
+/// celles des joueurs. Le nom de chacun s'affiche au survol. Rien si vide.
+class _SessionLines extends StatelessWidget {
+  const _SessionLines(this.lines);
+
+  final List<SessionLine> lines;
+
+  @override
+  Widget build(BuildContext context) {
+    if (lines.isEmpty) return const SizedBox.shrink();
+    const divider = BorderSide(color: dividerColor);
+    Widget banner((int, String) player) =>
+        Tooltip(message: player.$2, child: _IdBanner(player.$1));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final line in lines)
+          DecoratedBox(
+            decoration: const BoxDecoration(border: Border(bottom: divider)),
+            child: Padding(
+              padding: _cellPadding,
+              child: Row(
+                spacing: 12,
+                children: [
+                  Expanded(
+                    child: Text(
+                      line.label,
+                      style: _text,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (line.gm case final gm?) banner(gm),
+                  if (line.guests.isNotEmpty)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: 4,
+                      children: [for (final g in line.guests) banner(g)],
+                    ),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }

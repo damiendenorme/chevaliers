@@ -76,7 +76,7 @@ class MyApp extends StatelessWidget {
 
 /// Données RPG : mêmes tables que le Wargame, préfixées par rpg_.
 /// Parties, joueurs et jeux du JDR : construits à partir des parties de JDR
-/// (jeu, MJ, invités) ; le reste comme au Wargame.
+/// (jeu, MJ, joueurs) ; le reste comme au Wargame.
 Future<RowTable> fetchRpgRows(String table) async =>
     await fetchRpgSessionRows(table) ?? await fetchRows(table, prefix: 'rpg_');
 Future<Counts> fetchRpgCounts() => fetchCounts(prefix: 'rpg_');
