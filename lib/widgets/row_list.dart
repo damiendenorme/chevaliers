@@ -267,8 +267,18 @@ class _MasterDetailState extends State<_MasterDetail> {
     final edited = id == null ? null : _editedGuests[id];
     final (gms, guests) = edited ?? (s.gms, s.guests);
     final infos = [formatFullDate(s.date), ?s.scenario, ?s.event, ?s.place];
+    // Un clic sur un MJ ou un joueur y mène.
+    final toPlayer = switch (widget.onNavigate) {
+      final go? => (int playerId) => go('joueur', playerId),
+      null => null,
+    };
     if (editor == null || id == null) {
-      return _SessionDetail(infos: infos, gms: gms, guests: guests);
+      return _SessionDetail(
+        infos: infos,
+        gms: gms,
+        guests: guests,
+        onPlayerTap: toPlayer,
+      );
     }
     List<(int, String)> sorted(List<(int, String)> list) =>
         list..sort((a, b) => compareNames(a.$2, b.$2));
@@ -302,6 +312,7 @@ class _MasterDetailState extends State<_MasterDetail> {
       infos: infos,
       gms: gms,
       guests: guests,
+      onPlayerTap: toPlayer,
       onRemove: (playerId) async {
         await editor.remove(id, playerId);
         if (mounted) {
@@ -560,9 +571,27 @@ class _MasterDetailState extends State<_MasterDetail> {
                           child: _EventPlayers(
                             key: ValueKey(('joueurs', _selected)),
                             e.players,
+                            // Un clic sur un joueur y mène.
+                            onTap: switch (widget.onNavigate) {
+                              final go? => (id) => go('joueur', id),
+                              null => null,
+                            },
                           ),
                         ),
-                      _SessionLines(table.sessionLinesOf(_selected!)),
+                      _SessionLines(
+                        table.sessionLinesOf(_selected!),
+                        // Un clic sur une partie y mène (si on connaît son id).
+                        onTap: switch ((
+                          widget.onNavigate,
+                          table.sessionLineIds?[_selected!],
+                        )) {
+                          (final go?, final ids?) => (i) => go(
+                            'partie',
+                            ids[i],
+                          ),
+                          _ => null,
+                        },
+                      ),
                       // Une clé par ligne : le tri repart de zéro à chaque
                       // changement de ligne.
                       _LineList(
@@ -939,9 +968,12 @@ class _SortHeader extends StatelessWidget {
 /// son nom, à droite son nombre de parties jouées (dans une pastille, comme
 /// les jeux du Wargame). Triable par nom ou par nombre de parties.
 class _EventPlayers extends StatefulWidget {
-  const _EventPlayers(this.players, {super.key});
+  const _EventPlayers(this.players, {super.key, this.onTap});
 
   final List<({int id, String name, int parties})> players;
+
+  /// Si non nul : chaque joueur est cliquable (son id).
+  final ValueChanged<int>? onTap;
 
   @override
   State<_EventPlayers> createState() => _EventPlayersState();
@@ -996,25 +1028,25 @@ class _EventPlayersState extends State<_EventPlayers> {
           ),
         ),
         for (final p in players)
-          DecoratedBox(
-            decoration: const BoxDecoration(border: Border(bottom: divider)),
-            child: Padding(
-              padding: _cellPadding,
-              child: Row(
-                spacing: 10,
-                children: [
-                  _IdBanner(p.id),
-                  Expanded(
-                    child: Text(
-                      p.name,
-                      style: _text,
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+          _detailRow(
+            onTap: switch (widget.onTap) {
+              final tap? => () => tap(p.id),
+              null => null,
+            },
+            child: Row(
+              spacing: 10,
+              children: [
+                _IdBanner(p.id),
+                Expanded(
+                  child: Text(
+                    p.name,
+                    style: _text,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  _Badge(p.parties, style: _text),
-                ],
-              ),
+                ),
+                _Badge(p.parties, style: _text),
+              ],
             ),
           ),
       ],
@@ -1151,7 +1183,11 @@ class _SessionDetail extends StatelessWidget {
     this.onRemove,
     this.onAdd,
     this.onAddGm,
+    this.onPlayerTap,
   });
+
+  /// Si non nul : chaque MJ ou joueur est cliquable (son id).
+  final ValueChanged<int>? onPlayerTap;
 
   /// Lignes d'informations, centrées en haut (date, scénario…).
   final List<String> infos;
@@ -1169,44 +1205,40 @@ class _SessionDetail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
-    const divider = BorderSide(color: dividerColor);
-    Widget player((int, String) p, {bool gm = false}) => DecoratedBox(
-      decoration: const BoxDecoration(border: Border(bottom: divider)),
-      child: Padding(
-        padding: _cellPadding,
-        child: Row(
-          spacing: 10,
-          children: [
-            _IdBanner(p.$1),
-            Expanded(
-              child: Text(
-                p.$2,
-                style: _text,
-                softWrap: false,
-                overflow: TextOverflow.ellipsis,
-              ),
+    Widget player((int, String) p, {bool gm = false}) => _detailRow(
+      onTap: switch (onPlayerTap) {
+        final tap? => () => tap(p.$1),
+        null => null,
+      },
+      child: Row(
+        spacing: 10,
+        children: [
+          _IdBanner(p.$1),
+          Expanded(
+            child: Text(
+              p.$2,
+              style: _text,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
             ),
-            Text(
-              gm ? 'MJ' : 'Joueur',
-              style: _text.copyWith(fontSize: 12, color: labelColor),
+          ),
+          Text(
+            gm ? 'MJ' : 'Joueur',
+            style: _text.copyWith(fontSize: 12, color: labelColor),
+          ),
+          // Connecté : retirer ce MJ ou ce joueur.
+          if (onRemove case final remove?)
+            IconButton(
+              tooltip: 'Retirer de la partie',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+              iconSize: 16,
+              color: labelColor,
+              onPressed: () => remove(p.$1),
+              icon: const Icon(Icons.close),
             ),
-            // Connecté : retirer ce MJ ou ce joueur.
-            if (onRemove case final remove?)
-              IconButton(
-                tooltip: 'Retirer de la partie',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(
-                  width: 24,
-                  height: 24,
-                ),
-                iconSize: 16,
-                color: labelColor,
-                onPressed: () => remove(p.$1),
-                icon: const Icon(Icons.close),
-              ),
-          ],
-        ),
+        ],
       ),
     );
     return Column(
@@ -1264,49 +1296,51 @@ class _SessionDetail extends StatelessWidget {
 /// date à gauche, à droite la bannière de son MJ puis, un peu à l'écart,
 /// celles des joueurs. Le nom de chacun s'affiche au survol. Rien si vide.
 class _SessionLines extends StatelessWidget {
-  const _SessionLines(this.lines);
+  const _SessionLines(this.lines, {this.onTap});
 
   final List<SessionLine> lines;
+
+  /// Si non nul : chaque partie est cliquable (position dans [lines]).
+  final ValueChanged<int>? onTap;
 
   @override
   Widget build(BuildContext context) {
     if (lines.isEmpty) return const SizedBox.shrink();
-    const divider = BorderSide(color: dividerColor);
     Widget banner((int, String) player) =>
         Tooltip(message: player.$2, child: _IdBanner(player.$1));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final line in lines)
-          DecoratedBox(
-            decoration: const BoxDecoration(border: Border(bottom: divider)),
-            child: Padding(
-              padding: _cellPadding,
-              child: Row(
-                spacing: 12,
-                children: [
-                  Expanded(
-                    child: Text(
-                      line.label,
-                      style: _text,
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+        for (final (i, line) in lines.indexed)
+          _detailRow(
+            onTap: switch (onTap) {
+              final tap? => () => tap(i),
+              null => null,
+            },
+            child: Row(
+              spacing: 12,
+              children: [
+                Expanded(
+                  child: Text(
+                    line.label,
+                    style: _text,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  if (line.gms.isNotEmpty)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      spacing: 4,
-                      children: [for (final g in line.gms) banner(g)],
-                    ),
-                  if (line.guests.isNotEmpty)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      spacing: 4,
-                      children: [for (final g in line.guests) banner(g)],
-                    ),
-                ],
-              ),
+                ),
+                if (line.gms.isNotEmpty)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 4,
+                    children: [for (final g in line.gms) banner(g)],
+                  ),
+                if (line.guests.isNotEmpty)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 4,
+                    children: [for (final g in line.guests) banner(g)],
+                  ),
+              ],
             ),
           ),
       ],

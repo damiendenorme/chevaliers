@@ -31,6 +31,7 @@ class RowTable {
     this.listIds,
     this.listTable = 'jeu',
     this.matchListIds,
+    this.sessionLineIds,
     this.summaries,
     this.banners,
     this.lists,
@@ -134,6 +135,10 @@ class RowTable {
   /// élément de [matchLists] (même ordre) : un clic y mène.
   final List<List<int>>? listIds;
   final List<List<int>>? matchListIds;
+
+  /// Id de la partie de chaque élément de [sessionLines] (même ordre) : un
+  /// clic y mène.
+  final List<List<int>>? sessionLineIds;
 
   /// Table des éléments de [lists] : où mène un clic (« jeu » pour les jeux
   /// d'un joueur, « joueur » pour le classement d'un jeu).

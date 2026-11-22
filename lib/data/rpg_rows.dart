@@ -143,6 +143,7 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
         banners: [for (final s in sessions) bannerAsset('rpg_jeu', s.game)],
         photos: [for (final s in sessions) photos[s.id] ?? const []],
         partyIds: [for (final s in sessions) s.id],
+        rowIds: [for (final s in sessions) s.id],
         summaries: [for (final s in sessions) s.summary],
         sessionDetails: [
           for (final s in sessions)
@@ -165,6 +166,7 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
           for (final p in sorted) [p['nom'] as String],
         ],
         ids: [for (final p in sorted) p['id'] as int],
+        rowIds: [for (final p in sorted) p['id'] as int],
         banners: [
           for (final p in sorted) bannerAsset('rpg_joueur', p['id'] as int),
         ],
@@ -185,6 +187,14 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
                   sessionLine(s),
             ],
         ],
+        // Un clic sur une de ses parties y mène.
+        sessionLineIds: [
+          for (final p in sorted)
+            [
+              for (final s in sessions)
+                if (s.gms.contains(p['id']) || s.guests.contains(p['id'])) s.id,
+            ],
+        ],
       );
     case 'evenement':
       final sorted = [...events]
@@ -202,12 +212,19 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
         banners: [
           for (final e in sorted) bannerAsset('rpg_evenement', e['id'] as int),
         ],
-        // Ses parties, comme dans le détail d'un jeu.
+        // Ses parties, comme dans le détail d'un jeu ; un clic y mène.
         sessionLines: [
           for (final e in sorted)
             [
               for (final s in sessions)
                 if (s.event == e['id']) sessionLine(s),
+            ],
+        ],
+        sessionLineIds: [
+          for (final e in sorted)
+            [
+              for (final s in sessions)
+                if (s.event == e['id']) s.id,
             ],
         ],
         // Ceux qui ont joué à ses parties, avec leur nombre de parties.
@@ -260,6 +277,14 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
             [
               for (final s in sessions)
                 if (s.game == g['id']) sessionLine(s),
+            ],
+        ],
+        // Un clic sur une de ses parties y mène.
+        sessionLineIds: [
+          for (final g in sorted)
+            [
+              for (final s in sessions)
+                if (s.game == g['id']) s.id,
             ],
         ],
       );

@@ -2068,6 +2068,201 @@ void main() {
     expect(selected('La partie'), isTrue);
   });
 
+  testWidgets('RPG: in a player detail, a party leads to it', (tester) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRpgRows: (table) async => switch (table) {
+            'joueur' => const RowTable(
+              columns: ['Nom'],
+              rows: [
+                ['Merlin'],
+              ],
+              sessionLines: [
+                [
+                  (
+                    label: '28.11.2026 La Crypte des Goules',
+                    gms: [(1, 'Merlin')],
+                    guests: [],
+                  ),
+                ],
+              ],
+              sessionLineIds: [
+                [7],
+              ],
+            ),
+            'partie' => const RowTable(
+              columns: ['Jeu'],
+              rows: [
+                ['Pendragon'],
+                ['Call of Cthulhu'],
+              ],
+              rowIds: [3, 7],
+            ),
+            _ => const RowTable(columns: ['Nom'], rows: []),
+          },
+          loadRpgCounts: () async =>
+              (players: 1, events: 0, games: 2, boardGames: 2),
+        ),
+      ),
+    );
+    await tester.tap(find.text('RPG'));
+    await tester.pumpAndSettle();
+    Finder tab(String label) => find.descendant(
+      of: find.byType(SectionBar),
+      matching: find.text(label),
+    );
+    await tester.tap(tab('Joueurs').last);
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.text('Merlin'));
+    await tester.pump();
+
+    await tester.tap(find.text('28.11.2026 La Crypte des Goules'));
+    await tester.pump();
+    await tester.pump();
+    // La page RPG est la dernière (celle du Wargame reste en mémoire).
+    expect(tester.widget<Text>(tab('Parties').last).style?.color, Colors.white);
+    expect(
+      // Dans la liste (le détail le reprend aussi).
+      tester.widget<Text>(find.text('Call of Cthulhu').first).style?.color,
+      Colors.white,
+    );
+    expect(
+      tester.widget<Text>(find.text('Pendragon')).style?.color,
+      isNot(Colors.white),
+    );
+  });
+
+  testWidgets('RPG: events, parties and games lead to players and parties', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    const line = (
+      label: '28.11.2026 La Crypte des Goules',
+      gms: [(1, 'Merlin')],
+      guests: <(int, String)>[],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRpgRows: (table) async => switch (table) {
+            'evenement' => const RowTable(
+              columns: ['Nom'],
+              rows: [
+                ['Paris Éternité'],
+              ],
+              eventDetails: [
+                (players: [(id: 2, name: 'Morgane', parties: 1)]),
+              ],
+              sessionLines: [
+                [line],
+              ],
+              sessionLineIds: [
+                [7],
+              ],
+            ),
+            'jeu' => const RowTable(
+              columns: ['Nom'],
+              rows: [
+                ['Call of Cthulhu'],
+              ],
+              sessionLines: [
+                [line],
+              ],
+              sessionLineIds: [
+                [7],
+              ],
+            ),
+            'partie' => RowTable(
+              columns: const ['Jeu'],
+              rows: const [
+                ['Pendragon'],
+                ['Partie 7'],
+              ],
+              rowIds: const [3, 7],
+              partyIds: const [3, 7],
+              sessionDetails: [
+                for (final _ in [3, 7])
+                  (
+                    date: DateTime(2026, 11, 28),
+                    scenario: null,
+                    place: null,
+                    event: null,
+                    gms: const [(1, 'Merlin')],
+                    guests: const [(2, 'Morgane')],
+                  ),
+              ],
+            ),
+            'joueur' => const RowTable(
+              columns: ['Nom'],
+              rows: [
+                ['Merlin'],
+                ['Morgane'],
+              ],
+              rowIds: [1, 2],
+            ),
+            _ => const RowTable(columns: ['Nom'], rows: []),
+          },
+          loadRpgCounts: () async =>
+              (players: 2, events: 1, games: 1, boardGames: 1),
+        ),
+      ),
+    );
+    await tester.tap(find.text('RPG'));
+    await tester.pumpAndSettle();
+    Finder tab(String label) => find
+        .descendant(of: find.byType(SectionBar), matching: find.text(label))
+        .last;
+    bool active(String label) =>
+        tester.widget<Text>(tab(label)).style?.color == Colors.white;
+    bool selected(String text) =>
+        tester.widget<Text>(find.text(text).first).style?.color == Colors.white;
+    Future<void> open(String section, String row) async {
+      await tester.tap(tab(section));
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.text(row).first);
+      await tester.pump();
+    }
+
+    Future<void> follow(Finder target) async {
+      await tester.tap(target);
+      await tester.pump();
+      await tester.pump();
+    }
+
+    // Événement → joueur.
+    await open('Événements', 'Paris Éternité');
+    await follow(find.text('Morgane'));
+    expect(active('Joueurs'), isTrue);
+    expect(selected('Morgane'), isTrue);
+
+    // Événement → partie.
+    await open('Événements', 'Paris Éternité');
+    await follow(find.text('28.11.2026 La Crypte des Goules'));
+    expect(active('Parties'), isTrue);
+    expect(selected('Partie 7'), isTrue);
+
+    // Partie → joueur (le MJ).
+    await follow(find.text('Merlin'));
+    expect(active('Joueurs'), isTrue);
+    expect(selected('Merlin'), isTrue);
+
+    // Jeu → partie.
+    await open('Jeux', 'Call of Cthulhu');
+    await follow(find.text('28.11.2026 La Crypte des Goules'));
+    expect(active('Parties'), isTrue);
+    expect(selected('Partie 7'), isTrue);
+  });
+
   testWidgets('Hovering a button does not animate or resize it', (
     tester,
   ) async {
