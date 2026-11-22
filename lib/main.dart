@@ -8,6 +8,7 @@ import 'data/rows.dart';
 import 'supabase_config.dart';
 import 'widgets/login.dart';
 import 'widgets/name_dialog.dart';
+import 'widgets/party_dialog.dart';
 import 'widgets/row_list.dart';
 import 'widgets/section_buttons.dart';
 import 'widgets/top_bar.dart';
@@ -96,7 +97,14 @@ class MyHomePage extends StatefulWidget {
     this.saveRpgEvent = addRpgEvent,
     this.saveGame = addGame,
     this.saveRpgGame = addRpgGame,
+    this.saveParty = addParty,
+    this.loadPartyOptions = fetchPartyOptions,
   });
+
+  /// Ajout d'une partie (backoffice), au Wargame seulement : l'enregistrement
+  /// et les joueurs et jeux proposés.
+  final Future<void> Function(NewParty party) saveParty;
+  final Future<PartyOptions> Function() loadPartyOptions;
 
   /// Ajout d'un jeu (backoffice), au Wargame et au RPG.
   final Future<void> Function(String name) saveGame;
@@ -180,6 +188,8 @@ class _MyHomePageState extends State<MyHomePage> {
                       addPlayer: widget.savePlayer,
                       addEvent: widget.saveEvent,
                       addGame: widget.saveGame,
+                      addParty: widget.saveParty,
+                      loadPartyOptions: widget.loadPartyOptions,
                     ),
                   ),
                   // RPG : accentuation bronze.
@@ -293,7 +303,14 @@ class GamePage extends StatefulWidget {
     required this.addPlayer,
     required this.addEvent,
     required this.addGame,
+    this.addParty,
+    this.loadPartyOptions,
   });
+
+  /// Ajout d'une partie et ses choix (joueurs, jeux) ; null : pas d'ajout
+  /// de partie sur cette page.
+  final Future<void> Function(NewParty party)? addParty;
+  final Future<PartyOptions> Function()? loadPartyOptions;
 
   /// Ajout d'un jeu dans les données de la page.
   final Future<void> Function(String name) addGame;
@@ -343,7 +360,7 @@ class _GamePageState extends State<GamePage> {
   late final Stream<bool> _signedIn = widget.auth.signedIn;
 
   /// Bouton « + » de la section affichée : joueurs et jeux (nom), événements
-  /// (nom et date) ; aucun sur les parties.
+  /// (nom et date), parties (si la page le permet).
   VoidCallback? get _adder => switch (_active) {
     0 => () => _add(
       title: 'Nouveau joueur',
@@ -354,12 +371,37 @@ class _GamePageState extends State<GamePage> {
       askDate: true,
       save: widget.addEvent,
     ),
+    2 when widget.addParty != null => _addParty,
     3 => () => _add(
       title: 'Nouveau jeu',
       save: (name, _) => widget.addGame(name),
     ),
     _ => null,
   };
+
+  /// Demande la partie, l'enregistre, puis recharge la liste et les nombres.
+  Future<void> _addParty() => showDialog<void>(
+    context: context,
+    builder: (_) => AccentScope(
+      style: AccentStyle.of(context),
+      child: PartyDialog(
+        options: widget.loadPartyOptions!(),
+        onSubmit: (party) async {
+          await widget.addParty!(party);
+          _reload();
+        },
+      ),
+    ),
+  );
+
+  /// Recharge la liste affichée et les nombres de l'encoche.
+  void _reload() {
+    if (!mounted) return;
+    setState(() {
+      _rows = widget.loadRows(_sections[_active].$2);
+      _counts = widget.loadCounts();
+    });
+  }
 
   /// Demande le nom (et la date), enregistre, puis recharge la liste et les
   /// nombres.
@@ -377,11 +419,7 @@ class _GamePageState extends State<GamePage> {
         askDate: askDate,
         onSubmit: (name, date) async {
           await save(name, date);
-          if (!mounted) return;
-          setState(() {
-            _rows = widget.loadRows(_sections[_active].$2);
-            _counts = widget.loadCounts();
-          });
+          _reload();
         },
       ),
     ),
@@ -434,8 +472,7 @@ class _GamePageState extends State<GamePage> {
                       ),
                       const SizedBox(height: _tableGap),
                       Expanded(
-                        // Connecté, sur les joueurs, les événements ou les
-                        // jeux : bouton « + ».
+                        // Connecté : bouton « + » (voir [_adder]).
                         child: StreamBuilder<bool>(
                           stream: _signedIn,
                           initialData: false,

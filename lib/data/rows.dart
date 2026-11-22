@@ -241,7 +241,7 @@ _fetchGames(SupabaseClient db, String prefix) async {
       .from('${prefix}partie')
       .select(
         'id, jeu_id, joueur1_id, joueur2_id, score_joueur1, score_joueur2, '
-        'lieu, created_at',
+        'created_at, place:lieu_id(nom)',
       )
       .order('created_at', ascending: true)
       .order('id', ascending: true);
@@ -256,7 +256,7 @@ _fetchGames(SupabaseClient db, String prefix) async {
           score2: r['score_joueur2'] as int,
         ),
     ],
-    places: [for (final r in rows) r['lieu'] as String?],
+    places: [for (final r in rows) r['place']?['nom'] as String?],
     dates: [for (final r in rows) DateTime.parse(r['created_at'] as String)],
     ids: [for (final r in rows) r['id'] as int],
   );
@@ -638,3 +638,53 @@ Future<void> addEvent(String name, DateTime? date, {String prefix = ''}) {
 /// [prefix] : préfixe des tables (voir [fetchRows]).
 Future<void> addGame(String name, {String prefix = ''}) =>
     Supabase.instance.client.from('${prefix}jeu').insert({'nom': name});
+
+/// Choix possibles pour une nouvelle partie : les joueurs, les jeux et les
+/// lieux (id, nom), par nom.
+typedef PartyOptions = ({
+  List<(int, String)> players,
+  List<(int, String)> games,
+  List<(int, String)> places,
+});
+
+/// [prefix] : préfixe des tables (voir [fetchRows]).
+Future<PartyOptions> fetchPartyOptions({String prefix = ''}) async {
+  final db = Supabase.instance.client;
+  final (players, games, places) = await (
+    db.from('${prefix}joueur').select('id, nom'),
+    db.from('${prefix}jeu').select('id, nom'),
+    db.from('${prefix}lieu').select('id, nom'),
+  ).wait;
+  List<(int, String)> named(List<Map<String, dynamic>> rows) =>
+      [for (final r in rows) (r['id'] as int, r['nom'] as String)]
+        ..sort((a, b) => compareNames(a.$2, b.$2));
+  return (players: named(players), games: named(games), places: named(places));
+}
+
+/// Une nouvelle partie, à enregistrer.
+typedef NewParty = ({
+  int player1,
+  int player2,
+  int score1,
+  int score2,
+  int game,
+  int? place,
+  DateTime? date,
+});
+
+/// Ajoute une partie (backoffice : réservé aux connectés). Sans [NewParty.date],
+/// elle est datée de maintenant. [prefix] : voir [fetchRows].
+Future<void> addParty(NewParty party, {String prefix = ''}) =>
+    Supabase.instance.client.from('${prefix}partie').insert({
+      'joueur1_id': party.player1,
+      'joueur2_id': party.player2,
+      'score_joueur1': party.score1,
+      'score_joueur2': party.score2,
+      'jeu_id': party.game,
+      'lieu_id': ?party.place,
+      // À midi le jour choisi : l'ordre chronologique reste celui des jours.
+      'created_at': ?party.date
+          ?.copyWith(hour: 12, minute: 0, second: 0)
+          .toUtc()
+          .toIso8601String(),
+    });

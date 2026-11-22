@@ -1129,10 +1129,10 @@ void main() {
     await tester.pump();
     expect(find.byType(AddButton), findsOneWidget);
 
-    // Pas sur la liste des parties.
+    // Sur les parties du Wargame aussi (ajout de partie).
     await tester.tap(find.text('Parties'));
     await tester.pump();
-    expect(find.byType(AddButton), findsNothing);
+    expect(find.byType(AddButton), findsOneWidget);
     await tester.tap(joueurs);
     await tester.pump();
 
@@ -1159,6 +1159,11 @@ void main() {
     expect(rpgPlayers, ['Merlin']);
     expect(players, ['Arthur', 'Lancelot']);
     expect(find.text('Merlin'), findsOneWidget);
+
+    // Au RPG, pas d'ajout de partie.
+    await tester.tap(find.text('Parties'));
+    await tester.pump();
+    expect(find.byType(AddButton), findsNothing);
   });
 
   testWidgets('Signed in, a + button adds an event with an optional date', (
@@ -1206,9 +1211,7 @@ void main() {
     expect(find.text('Tournoi de Noël'), findsOneWidget);
   });
 
-  testWidgets('Signed in, a + button adds a game; none on parties', (
-    tester,
-  ) async {
+  testWidgets('Signed in, a + button adds a game', (tester) async {
     tester.view.physicalSize = const Size(1400, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -1233,8 +1236,6 @@ void main() {
     );
     await auth.signIn('arthur@table.fr', 'excalibur');
     await tester.pump();
-    // Sur les parties (section de départ) : pas de bouton.
-    expect(find.byType(AddButton), findsNothing);
 
     await tester.tap(find.text('Jeux'));
     await tester.pump();
@@ -1247,6 +1248,76 @@ void main() {
     await tester.pumpAndSettle();
     expect(games, ['Mordheim']);
     expect(find.text('Mordheim'), findsOneWidget);
+  });
+
+  testWidgets('Signed in, a + button adds a Wargame party', (tester) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final parties = <NewParty>[];
+    final auth = FakeAuth();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => const RowTable(columns: ['Nom'], rows: []),
+          loadCounts: () async =>
+              (players: 2, events: 0, games: parties.length, boardGames: 1),
+          auth: auth,
+          loadPartyOptions: () async => (
+            players: [(1, 'Arthur'), (2, 'Lancelot')],
+            games: [(5, 'Échecs')],
+            places: [(8, 'Aumes'), (9, 'Frontignan')],
+          ),
+          saveParty: (party) async => parties.add(party),
+        ),
+      ),
+    );
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+
+    // Section de départ : les parties.
+    await tester.tap(find.byType(AddButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Nouvelle partie'), findsOneWidget);
+
+    // Sans joueurs : refus.
+    await tester.tap(find.text('Ajouter'));
+    await tester.pump();
+    expect(find.text('Choisissez les deux joueurs.'), findsOneWidget);
+
+    Future<void> choose(String label, String item) async {
+      await tester.tap(
+        find.widgetWithText(DropdownButtonFormField<int>, label),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(item).last);
+      await tester.pumpAndSettle();
+    }
+
+    await choose('Joueur 1', 'Arthur');
+    await choose('Joueur 2', 'Arthur');
+    await tester.tap(find.text('Ajouter'));
+    await tester.pump();
+    expect(find.text('Choisissez deux joueurs différents.'), findsOneWidget);
+
+    await choose('Joueur 2', 'Lancelot');
+    await choose('Jeu', 'Échecs');
+    final scores = find.widgetWithText(TextField, 'Score');
+    await tester.enterText(scores.at(0), '3');
+    await tester.enterText(scores.at(1), '2');
+    // Lieu : parmi Aumes et Frontignan.
+    await choose('Lieu (facultatif)', 'Frontignan');
+    await tester.tap(find.text('Ajouter'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nouvelle partie'), findsNothing);
+    expect(parties, hasLength(1));
+    final p = parties.single;
+    expect(
+      (p.player1, p.player2, p.score1, p.score2, p.game, p.place, p.date),
+      (1, 2, 3, 2, 5, 9, null),
+    );
   });
 
   testWidgets('Hovering a button does not animate or resize it', (
