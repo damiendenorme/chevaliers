@@ -2261,14 +2261,15 @@ void main() {
     // Pas de liste des joueurs à part : le classement les montre.
     expect(inList('Gloire'), findsNothing);
 
-    // Triable : par nom, de Z à A au 2e clic ; le rang reste celui du
-    // classement.
-    double top(String t) => tester.getTopLeft(inList(t)).dy;
+    // Triable : par nom, de Z à A au 2e clic, sans rang ; par nombre, le
+    // rang reste celui du classement.
+    double top(String t) => tester.getTopLeft(inList(t).first).dy;
     await tester.tap(inList('Nom'));
     await tester.pump();
     await tester.tap(inList('Nom'));
     await tester.pump();
-    expect(top('2. Gauvain') < top('1. Arthur'), isTrue);
+    expect(top('Gauvain') < top('Arthur'), isTrue);
+    expect(inList('1. Arthur'), findsNothing);
     await tester.tap(inList('D'));
     await tester.pump();
     expect(top('3. Bors') < top('1. Arthur'), isTrue);

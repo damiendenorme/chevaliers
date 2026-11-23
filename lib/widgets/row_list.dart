@@ -3776,7 +3776,10 @@ class _StandingsState extends State<_Standings> {
               children: [
                 Expanded(
                   child: Text(
-                    '${ranks[s.player.$1]}. ${s.player.$2}',
+                    // Le rang au classement, sauf trié par nom.
+                    _sortBy == _StandingSort.name
+                        ? s.player.$2
+                        : '${ranks[s.player.$1]}. ${s.player.$2}',
                     style: _text,
                     softWrap: false,
                     overflow: TextOverflow.ellipsis,
