@@ -200,6 +200,24 @@ class _Cards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Dans chaque carte, une barre de défilement toujours visible quand le
+    // contenu dépasse, de la couleur des bordures de la page.
+    return ScrollbarTheme(
+      data: ScrollbarThemeData(
+        thumbVisibility: const WidgetStatePropertyAll(true),
+        thickness: const WidgetStatePropertyAll(6),
+        radius: const Radius.circular(3),
+        crossAxisMargin: BevelEdge.width + 2,
+        mainAxisMargin: BevelEdge.width + 2,
+        thumbColor: WidgetStatePropertyAll(
+          AccentStyle.of(context).border.withValues(alpha: 0.7),
+        ),
+      ),
+      child: _row(),
+    );
+  }
+
+  Widget _row() {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: RowList.gap,

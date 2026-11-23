@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -58,6 +59,8 @@ class MyApp extends StatelessWidget {
       locale: const Locale('fr'),
       supportedLocales: const [Locale('fr')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      // Le contenu des cartes défile aussi en le faisant glisser à la souris.
+      scrollBehavior: const _DragScrollBehavior(),
       theme: ThemeData(
         // Police de toute l'app : Cinzel, capitales romaines.
         fontFamily: 'Cinzel',
@@ -73,6 +76,18 @@ class MyApp extends StatelessWidget {
       home: const MyHomePage(),
     );
   }
+}
+
+/// Défilement à la molette, au doigt, au pavé tactile, et aussi en faisant
+/// glisser à la souris.
+class _DragScrollBehavior extends MaterialScrollBehavior {
+  const _DragScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    ...super.dragDevices,
+    PointerDeviceKind.mouse,
+  };
 }
 
 /// Données RPG : mêmes tables que le Wargame, préfixées par rpg_.
