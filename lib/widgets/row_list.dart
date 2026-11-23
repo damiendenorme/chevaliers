@@ -37,7 +37,12 @@ class RowList extends StatelessWidget {
     this.selectId,
     this.onSetEventType,
     this.eventEditor,
+    this.onAddEventSession,
   });
+
+  /// Si non nul : un bouton ajoute une partie de JDR à l'événement affiché
+  /// (backoffice), avec son id.
+  final ValueChanged<int>? onAddEventSession;
 
   /// Si non nul : les joueurs et les parties d'un événement s'ajoutent
   /// (backoffice).
@@ -130,6 +135,7 @@ class RowList extends StatelessWidget {
           selectId: selectId,
           onSetEventType: onSetEventType,
           eventEditor: eventEditor,
+          onAddEventSession: onAddEventSession,
         );
       },
     );
@@ -239,9 +245,13 @@ class _MasterDetail extends StatefulWidget {
     this.selectId,
     this.onSetEventType,
     this.eventEditor,
+    this.onAddEventSession,
   });
 
   final RowTable table;
+
+  /// Connecté (RPG) : ajout d'une partie à un événement.
+  final ValueChanged<int>? onAddEventSession;
 
   /// Connecté : joueurs et parties des événements Wargame.
   final EventEditor? eventEditor;
@@ -703,6 +713,16 @@ class _MasterDetailState extends State<_MasterDetail> {
                         ),
                       _SessionLines(
                         table.sessionLinesOf(_selected!),
+                        // Connecté (RPG) : sous les parties d'un événement,
+                        // un bouton pour en ajouter une.
+                        onAdd: switch ((
+                          widget.onAddEventSession,
+                          table.eventDetail(_selected!),
+                          table.rowId(_selected!),
+                        )) {
+                          (final add?, _?, final id?) => () => add(id),
+                          _ => null,
+                        },
                         // Un clic sur une partie y mène (si on connaît son id).
                         onTap: switch ((
                           widget.onNavigate,
@@ -1573,16 +1593,21 @@ class _SessionDetail extends StatelessWidget {
 /// date à gauche, à droite la bannière de son MJ puis, un peu à l'écart,
 /// celles des joueurs. Le nom de chacun s'affiche au survol. Rien si vide.
 class _SessionLines extends StatelessWidget {
-  const _SessionLines(this.lines, {this.onTap});
+  const _SessionLines(this.lines, {this.onTap, this.onAdd});
 
   final List<SessionLine> lines;
+
+  /// Si non nul (connecté, événement) : un bouton rond sous les parties en
+  /// ajoute une ; sans partie, « Aucune partie. » au-dessus.
+  final VoidCallback? onAdd;
 
   /// Si non nul : chaque partie est cliquable (position dans [lines]).
   final ValueChanged<int>? onTap;
 
   @override
   Widget build(BuildContext context) {
-    if (lines.isEmpty) return const SizedBox.shrink();
+    final add = onAdd;
+    if (lines.isEmpty && add == null) return const SizedBox.shrink();
     Widget banner((int, String) player) =>
         Tooltip(message: player.$2, child: _IdBanner(player.$1));
     return Column(
@@ -1618,6 +1643,24 @@ class _SessionLines extends StatelessWidget {
                     children: [for (final g in line.guests) banner(g)],
                   ),
               ],
+            ),
+          ),
+        if (lines.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'Aucune partie.',
+              textAlign: TextAlign.center,
+              style: _text.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        if (add != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: AddButton(label: 'Ajouter une partie', onPressed: add),
             ),
           ),
       ],

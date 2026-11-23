@@ -14,7 +14,13 @@ class RpgPartyDialog extends StatefulWidget {
     super.key,
     required this.options,
     required this.onSubmit,
+    this.event,
   });
+
+  /// Événement de la partie (pas de choix dans la fenêtre) : ajoutée depuis
+  /// le détail de l'événement. Null depuis l'onglet Parties : sans
+  /// événement.
+  final int? event;
 
   final Future<RpgPartyOptions> options;
   final Future<void> Function(NewRpgParty party) onSubmit;
@@ -28,7 +34,6 @@ class _RpgPartyDialogState extends State<RpgPartyDialog> {
   final _gms = <int>{};
   final _guests = <int>{};
   int? _place;
-  int? _event;
   final _scenario = TextEditingController();
   DateTime _date = DateUtils.dateOnly(DateTime.now());
   bool _busy = false;
@@ -74,7 +79,7 @@ class _RpgPartyDialogState extends State<RpgPartyDialog> {
             if (!_gms.contains(g)) g,
         ],
         place: _place,
-        event: _event,
+        event: widget.event,
         scenario: _scenario.text.trim().isEmpty ? null : _scenario.text.trim(),
         date: _date,
       ));
@@ -215,13 +220,6 @@ class _RpgPartyDialogState extends State<RpgPartyDialog> {
                         value: _place,
                         optional: true,
                         onChanged: (id) => setState(() => _place = id),
-                      ),
-                      _picker(
-                        label: 'Événement (facultatif)',
-                        items: options.events,
-                        value: _event,
-                        optional: true,
-                        onChanged: (id) => setState(() => _event = id),
                       ),
                       Row(
                         children: [

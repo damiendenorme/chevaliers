@@ -1575,7 +1575,6 @@ void main() {
             players: [(1, 'Merlin'), (2, 'Morgane'), (3, 'Perceval')],
             games: [(4, 'Pendragon')],
             places: [(8, 'Aumes')],
-            events: [(6, 'Trench Crusade')],
           ),
           saveRpgParty: (party) async => parties.add(party),
         ),
@@ -1626,7 +1625,14 @@ void main() {
     await tester.tap(find.widgetWithText(FilterChip, 'Morgane').last);
     await tester.tap(find.widgetWithText(FilterChip, 'Perceval').last);
     await tester.pump();
-    await choose('Événement (facultatif)', 'Trench Crusade');
+    // Pas de champ Événement : depuis Parties, sans événement.
+    expect(
+      find.widgetWithText(
+        DropdownButtonFormField<int?>,
+        'Événement (facultatif)',
+      ),
+      findsNothing,
+    );
     await tester.enterText(
       find.widgetWithText(TextField, 'Scénario (facultatif)'),
       'La Tombe de M. Eustache',
@@ -1636,11 +1642,80 @@ void main() {
 
     expect(find.text('Nouvelle partie'), findsNothing);
     final p = parties.single;
-    expect((p.game, p.place, p.event), (4, null, 6));
+    expect((p.game, p.place, p.event), (4, null, null));
     expect(p.gms, [1]);
     expect(p.scenario, 'La Tombe de M. Eustache');
     expect(p.guests..sort(), [2, 3]);
     expect(p.date, DateUtils.dateOnly(DateTime.now()));
+  });
+
+  testWidgets('Signed in, an RPG event detail adds a party to the event', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final parties = <NewRpgParty>[];
+    final loaded = <String>[];
+    final auth = FakeAuth();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRpgRows: (table) async {
+            loaded.add(table);
+            return const RowTable(
+              columns: ['Nom'],
+              rows: [
+                ['Paris Éternité'],
+              ],
+              rowIds: [6],
+              eventDetails: [(players: [])],
+              sessionLines: [[]],
+            );
+          },
+          loadRpgCounts: () async =>
+              (players: 2, events: 1, games: 0, boardGames: 1),
+          auth: auth,
+          loadRpgPartyOptions: () async => (
+            players: [(1, 'Merlin'), (2, 'Morgane')],
+            games: [(4, 'Pendragon')],
+            places: [(8, 'Aumes')],
+          ),
+          saveRpgParty: (party) async => parties.add(party),
+        ),
+      ),
+    );
+    await tester.tap(find.text('RPG'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Paris Éternité').last);
+    await tester.pumpAndSettle();
+    final add = find.byWidgetPredicate(
+      (w) => w is AddButton && w.label == 'Ajouter une partie',
+    );
+    // Déconnecté : ni bouton, ni « Aucune partie. ».
+    expect(add, findsNothing);
+    expect(find.text('Aucune partie.'), findsNothing);
+
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+    expect(find.text('Aucune partie.'), findsOneWidget);
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    expect(find.text('Nouvelle partie'), findsOneWidget);
+    await tester.tap(find.widgetWithText(DropdownButtonFormField<int?>, 'Jeu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pendragon').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilterChip, 'Merlin').first);
+    await tester.pump();
+    await tester.tap(find.text('Ajouter'));
+    await tester.pumpAndSettle();
+
+    // La partie est de l'événement ; on reste sur son détail.
+    expect(parties.single.event, 6);
+    expect(loaded.last, 'evenement');
+    expect(find.text('Aucune partie.'), findsOneWidget);
   });
 
   testWidgets('An RPG event detail lists players and their event Glory', (

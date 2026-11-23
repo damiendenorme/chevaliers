@@ -558,16 +558,22 @@ class _GamePageState extends State<GamePage> {
     });
   }
 
-  /// Demande la partie de JDR, l'enregistre, puis recharge.
-  Future<void> _addRpgParty() => showDialog<void>(
+  /// Demande la partie de JDR, l'enregistre, puis recharge. Avec [event]
+  /// (depuis son détail), la partie est de cet événement, qui reste choisi.
+  Future<void> _addRpgParty({int? event}) => showDialog<void>(
     context: context,
     builder: (_) => AccentScope(
       style: AccentStyle.of(context),
       child: RpgPartyDialog(
+        event: event,
         options: widget.loadRpgPartyOptions!(),
         onSubmit: (party) async {
           await widget.addRpgParty!(party);
-          _reload();
+          if (event == null) {
+            _reload();
+          } else {
+            _reloadEvent(event);
+          }
         },
       ),
     ),
@@ -698,6 +704,11 @@ class _GamePageState extends State<GamePage> {
                                   : null,
                               // Connecté : joueurs et parties des événements.
                               eventEditor: signedIn ? _eventEditor : null,
+                              // Connecté (RPG) : partie d'un événement.
+                              onAddEventSession:
+                                  signedIn && widget.addRpgParty != null
+                                  ? (event) => _addRpgParty(event: event)
+                                  : null,
                             );
                           },
                         ),

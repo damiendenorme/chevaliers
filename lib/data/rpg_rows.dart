@@ -206,6 +206,9 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
       return RowTable(
         // Pas de date dans le détail : seulement dans la liste.
         columns: const ['Nom'],
+        // Après l'ajout d'une partie, la liste rechargée garde l'événement
+        // choisi.
+        rowIds: [for (final e in sorted) e['id'] as int],
         rows: [
           for (final e in sorted) [e['nom'] as String],
         ],
@@ -395,26 +398,19 @@ typedef RpgPartyOptions = ({
   List<(int, String)> players,
   List<(int, String)> games,
   List<(int, String)> places,
-  List<(int, String)> events,
 });
 
 Future<RpgPartyOptions> fetchRpgPartyOptions() async {
   final db = Supabase.instance.client;
-  final (players, games, places, events) = await (
+  final (players, games, places) = await (
     db.from('rpg_joueur').select('id, nom'),
     db.from('rpg_jeu').select('id, nom'),
     db.from('rpg_lieu').select('id, nom'),
-    db.from('rpg_evenement').select('id, nom'),
   ).wait;
   List<(int, String)> named(List<Map<String, dynamic>> rows) =>
       [for (final r in rows) (r['id'] as int, r['nom'] as String)]
         ..sort((a, b) => compareNames(a.$2, b.$2));
-  return (
-    players: named(players),
-    games: named(games),
-    places: named(places),
-    events: named(events),
-  );
+  return (players: named(players), games: named(games), places: named(places));
 }
 
 /// Une nouvelle partie de JDR, à enregistrer.
