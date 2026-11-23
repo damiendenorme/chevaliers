@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'bracket.dart';
+import 'championship.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -31,6 +32,7 @@ class RowTable {
     this.eventBrackets,
     this.eventPlayed,
     this.eventGames,
+    this.eventChampionships,
     this.gameOptions = const [],
     this.sessionDetails,
     this.sessionLines,
@@ -152,6 +154,12 @@ class RowTable {
   final List<List<List<BracketMatch>>?>? eventBrackets;
 
   List<List<BracketMatch>>? eventBracket(int index) => eventBrackets?[index];
+
+  /// Pour les événements Wargame : leur championnat (voir [Championship]),
+  /// affiché quand l'événement est de ce type.
+  final List<Championship?>? eventChampionships;
+
+  Championship? eventChampionship(int index) => eventChampionships?[index];
 
   /// Pour les parties de JDR : chaque ligne est une partie, affichée dans le
   /// détail à la manière d'une partie de Wargame, à la place de ses colonnes.
@@ -728,7 +736,10 @@ Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
   ) = await (
     db
         .from('evenement')
-        .select('id, nom, date, type, tours, jeu_id')
+        .select(
+          'id, nom, date, type, tours, jeu_id, aller_retour, playoffs, '
+          'points_victoire, points_nul, points_defaite, points_gloire',
+        )
         .order('nom', ascending: true),
     db.from('joueur').select('id, nom'),
     db.from('jeu').select('id, nom'),
@@ -796,7 +807,81 @@ Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
     );
   }
 
+  // Championnat : le calendrier entre ses joueurs, rempli par ses parties
+  // (sauf celles des playoffs), le classement, puis les playoffs entre les
+  // premiers une fois toutes les rencontres jouées.
+  final deltas = eloDeltas(games);
+  Championship championship(Map<String, dynamic> r) {
+    final event = r['id'] as int;
+    final players = [for (final p in detail(event).players) (p.id, p.name)];
+    final playoffMatches = {
+      for (final m in matches)
+        if (m['evenement_id'] == event)
+          (m['tour'] as int, m['position'] as int): m['partie_id'] as int?,
+    };
+    final playoffParties = {...playoffMatches.values.nonNulls};
+    final returnLeg = r['aller_retour'] as bool?;
+    final fixtures = returnLeg == null
+        ? <Fixture>[]
+        : buildCalendar(
+            players,
+            returnLeg: returnLeg,
+            parties: [
+              for (final (i, _) in games.indexed)
+                if (events[i] == event && !playoffParties.contains(ids[i]))
+                  (id: ids[i], score: partyScores[ids[i]]!, delta: deltas[i]),
+            ],
+          );
+    final ChampionshipPoints points = (
+      win: r['points_victoire'] as int? ?? defaultPoints.win,
+      draw: r['points_nul'] as int? ?? defaultPoints.draw,
+      loss: r['points_defaite'] as int? ?? defaultPoints.loss,
+      glory: r['points_gloire'] as bool? ?? false,
+    );
+    final table = standings(players, fixtures, points);
+    final playoffs = Playoffs.fromKey(r['playoffs'] as String?);
+    List<List<BracketMatch>>? bracket;
+    if (playoffs?.rounds case final rounds?) {
+      final complete = fixtures.isNotEmpty && fixtures.every(isFixturePlayed);
+      final seeded = complete ? seedPlayoffs(table, rounds.roundCount) : null;
+      bracket = buildBracket(
+        rounds.roundCount,
+        [
+          for (final s in seeded ?? const <StoredMatch>[])
+            (
+              round: 0,
+              position: s.position,
+              player1: s.player1,
+              player2: s.player2,
+              party: playoffMatches[(0, s.position)],
+            ),
+          for (final MapEntry(key: (round, position), :value)
+              in playoffMatches.entries)
+            if (round > 0)
+              (
+                round: round,
+                position: position,
+                player1: null,
+                player2: null,
+                party: value,
+              ),
+        ],
+        partyScores,
+        playerNames,
+      );
+    }
+    return (
+      returnLeg: returnLeg,
+      playoffs: playoffs,
+      points: points,
+      fixtures: fixtures,
+      standings: table,
+      playoffBracket: bracket,
+    );
+  }
+
   return RowTable(
+    eventChampionships: [for (final r in rows) championship(r)],
     // Bannière : celle du jeu de l'événement ; aucune tant qu'il n'est pas
     // choisi.
     banners: [
@@ -1097,6 +1182,95 @@ enum EliminationRound {
   ].firstOrNull;
 }
 
+/// Playoffs d'un championnat : aucun, ou leur premier tour, comme une
+/// élimination.
+enum Playoffs {
+  aucun('aucun', 'Sans playoffs', null),
+  demi('demi', 'Playoffs : demi-finales', EliminationRound.demi),
+  quart('quart', 'Playoffs : quarts de finale', EliminationRound.quart),
+  huitieme(
+    'huitieme',
+    'Playoffs : huitièmes de finale',
+    EliminationRound.huitieme,
+  ),
+  seizieme(
+    'seizieme',
+    'Playoffs : seizièmes de finale',
+    EliminationRound.seizieme,
+  ),
+  trenteDeuxieme(
+    'trente_deuxieme',
+    'Playoffs : trente-deuxièmes de finale',
+    EliminationRound.trenteDeuxieme,
+  );
+
+  const Playoffs(this.key, this.label, this.rounds);
+
+  /// Valeur en base.
+  final String key;
+
+  /// Nom affiché.
+  final String label;
+
+  /// Premier tour du tableau des playoffs (null : pas de playoffs).
+  final EliminationRound? rounds;
+
+  /// Depuis la valeur en base (null ou inconnue : pas choisi).
+  static Playoffs? fromKey(String? key) => [
+    for (final p in values)
+      if (p.key == key) p,
+  ].firstOrNull;
+}
+
+/// Championnat d'un événement Wargame : aller simple ou aller-retour (null :
+/// pas encore choisi), ses playoffs (null : pas encore choisis), son
+/// barème, son calendrier (vide tant que la formule n'est pas choisie), son
+/// classement et le tableau de ses playoffs (null : sans playoffs). Ce
+/// tableau se remplit une fois toutes les rencontres jouées.
+typedef Championship = ({
+  bool? returnLeg,
+  Playoffs? playoffs,
+  ChampionshipPoints points,
+  List<Fixture> fixtures,
+  List<Standing> standings,
+  List<List<BracketMatch>>? playoffBracket,
+});
+
+/// Enregistre les réglages du championnat de l'événement Wargame [eventId]
+/// (backoffice) : seulement ceux qui sont donnés.
+Future<void> saveChampionship(
+  int eventId, {
+  bool? returnLeg,
+  Playoffs? playoffs,
+  ChampionshipPoints? points,
+}) => Supabase.instance.client
+    .from('evenement')
+    .update({
+      'aller_retour': ?returnLeg,
+      'playoffs': ?playoffs?.key,
+      if (points != null) ...{
+        'points_victoire': points.win,
+        'points_nul': points.draw,
+        'points_defaite': points.loss,
+        'points_gloire': points.glory,
+      },
+    })
+    .eq('id', eventId);
+
+/// Joue une rencontre du championnat de l'événement [eventId] (backoffice)
+/// : enregistre sa partie, au jeu [gameId].
+Future<void> playFixture(int eventId, int gameId, PartyScore result) =>
+    addParty((
+      player1: result.player1,
+      player2: result.player2,
+      score1: result.score1,
+      score2: result.score2,
+      game: gameId,
+      place: null,
+      event: eventId,
+      date: null,
+    ));
+
 /// Enregistre le nombre de tours de l'événement Wargame [eventId]
 /// (backoffice).
 Future<void> saveEventRounds(int eventId, EliminationRound rounds) => Supabase
@@ -1183,6 +1357,14 @@ typedef EventPlayersEditor = ({
     PartyScore result,
   )
   playBracketMatch,
+  Future<void> Function(
+    int eventId, {
+    bool? returnLeg,
+    Playoffs? playoffs,
+    ChampionshipPoints? points,
+  })
+  saveChampionship,
+  Future<void> Function(int eventId, int gameId, PartyScore result) playFixture,
 });
 
 /// Tous les joueurs Wargame (id, nom), par nom.

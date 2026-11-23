@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chevaliers/data/auth.dart';
 import 'package:chevaliers/data/bracket.dart';
+import 'package:chevaliers/data/championship.dart';
 import 'package:chevaliers/data/rows.dart';
 import 'package:chevaliers/data/rpg_rows.dart';
 import 'package:chevaliers/main.dart';
@@ -1477,6 +1478,8 @@ void main() {
             },
             setBracketPlayer: (_, _, _, _) async {},
             playBracketMatch: (_, _, _, _, _) async {},
+            saveChampionship: (_, {returnLeg, playoffs, points}) async {},
+            playFixture: (_, _, _) async {},
           ),
         ),
       ),
@@ -2119,6 +2122,8 @@ void main() {
                 placed.add((e, pos, side, player)),
             playBracketMatch: (e, game, round, pos, result) async =>
                 played.add((e, game, round, pos, result)),
+            saveChampionship: (_, {returnLeg, playoffs, points}) async {},
+            playFixture: (_, _, _) async {},
           ),
         ),
       ),
@@ -2165,6 +2170,149 @@ void main() {
     expect(played, [
       (7, 5, 0, 0, (player1: 1, player2: 2, score1: 2, score2: 1)),
     ]);
+  });
+
+  testWidgets('A championship shows its standings, calendar and playoffs', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final settings = <(int, bool?, Playoffs?, ChampionshipPoints?)>[];
+    final played = <(int, int, PartyScore)>[];
+    final auth = FakeAuth();
+    const players = [(1, 'Arthur'), (2, 'Bors'), (3, 'Gauvain')];
+    // Arthur a battu Bors ; les autres rencontres restent à jouer.
+    final fixtures = buildCalendar(
+      players,
+      returnLeg: false,
+      parties: const [
+        (
+          id: 10,
+          score: (player1: 1, player2: 2, score1: 3, score2: 1),
+          delta: 50,
+        ),
+      ],
+    );
+    final Championship championship = (
+      returnLeg: false,
+      playoffs: Playoffs.demi,
+      points: defaultPoints,
+      fixtures: fixtures,
+      standings: standings(players, fixtures, defaultPoints),
+      playoffBracket: buildBracket(2, const [], const {}, const {}),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => RowTable(
+            columns: const ['Nom'],
+            rows: const [
+              ['Camlann'],
+            ],
+            rowIds: const [7],
+            eventIds: const [7],
+            eventTypes: const [EventType.championnat],
+            eventChampionships: [championship],
+            eventGames: const [(5, 'Échecs')],
+            eventDetails: const [
+              (
+                players: [
+                  (id: 1, name: 'Arthur', glory: 50),
+                  (id: 2, name: 'Bors', glory: -50),
+                  (id: 3, name: 'Gauvain', glory: 0),
+                ],
+              ),
+            ],
+          ),
+          loadCounts: () async =>
+              (players: 3, events: 1, games: 1, boardGames: 1),
+          auth: auth,
+          eventPlayers: (
+            players: () async => const [],
+            add: (_, _) async {},
+            remove: (_, _) async {},
+            setBracketPlayer: (_, _, _, _) async {},
+            playBracketMatch: (_, _, _, _, _) async {},
+            saveChampionship: (e, {returnLeg, playoffs, points}) async =>
+                settings.add((e, returnLeg, playoffs, points)),
+            playFixture: (e, game, result) async =>
+                played.add((e, game, result)),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(inList('Camlann'));
+    await tester.pump();
+
+    // Ses réglages, son classement, son calendrier et ses playoffs.
+    expect(inList('Aller simple'), findsOneWidget);
+    expect(inList('Playoffs : demi-finales'), findsOneWidget);
+    expect(inList('Victoire 3 · Nul 1 · Défaite 0'), findsOneWidget);
+    expect(inList('Classement'), findsOneWidget);
+    expect(inList('1. Arthur'), findsOneWidget);
+    expect(inList('Journée 1'), findsOneWidget);
+    expect(inList('3 – 1'), findsOneWidget);
+    expect(inList('Playoffs'), findsOneWidget);
+    expect(inList('Finale'), findsOneWidget);
+    expect(find.text('+'), findsNothing);
+    // Pas de liste des joueurs à part : le classement les montre.
+    expect(inList('Gloire'), findsNothing);
+
+    // Triable : par nom, de Z à A au 2e clic ; le rang reste celui du
+    // classement.
+    double top(String t) => tester.getTopLeft(inList(t)).dy;
+    await tester.tap(inList('Nom'));
+    await tester.pump();
+    await tester.tap(inList('Nom'));
+    await tester.pump();
+    expect(top('2. Gauvain') < top('1. Arthur'), isTrue);
+    await tester.tap(inList('D'));
+    await tester.pump();
+    expect(top('3. Bors') < top('1. Arthur'), isTrue);
+
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+
+    // Une rencontre à jouer : le nul est permis.
+    await tester.tap(find.text('+').first);
+    await tester.pumpAndSettle();
+    final scores = find.widgetWithText(TextField, 'Score');
+    await tester.enterText(scores.at(0), '2');
+    await tester.enterText(scores.at(1), '2');
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(played, hasLength(1));
+    expect(played.single.$1, 7);
+    expect(played.single.$2, 5);
+    expect((played.single.$3.score1, played.single.$3.score2), (2, 2));
+
+    // Aller-retour.
+    await tester.tap(find.byTooltip('Choisir aller ou aller-retour'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Aller-retour').last);
+    await tester.pumpAndSettle();
+    expect(settings, [(7, true, null, null)]);
+
+    // Le barème : la Gloire en guise de points.
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w is AddButton && w.label == 'Modifier les points',
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(settings.last, (
+      7,
+      null,
+      null,
+      (win: 3, draw: 1, loss: 0, glory: true),
+    ));
   });
 
   testWidgets('A Wargame event has a type, chosen when signed in', (

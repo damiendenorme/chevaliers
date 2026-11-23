@@ -136,6 +136,8 @@ class MyHomePage extends StatefulWidget {
       remove: removeEventPlayer,
       setBracketPlayer: setBracketPlayer,
       playBracketMatch: playBracketMatch,
+      saveChampionship: saveChampionship,
+      playFixture: playFixture,
     ),
     this.writeRpgSummary = saveRpgSummary,
     this.uploadPhoto = pickAndUploadPhoto,
@@ -556,6 +558,19 @@ class _GamePageState extends State<GamePage> {
       },
       setGame: (event, game) async {
         await saveGame(event, game);
+        _reloadEvent(event);
+      },
+      setChampionship: (event, {returnLeg, playoffs, points}) async {
+        await players.saveChampionship(
+          event,
+          returnLeg: returnLeg,
+          playoffs: playoffs,
+          points: points,
+        );
+        _reloadEvent(event);
+      },
+      playFixture: (event, game, result) async {
+        await players.playFixture(event, game, result);
         _reloadEvent(event);
       },
       addParty: (event, game, eventPlayers) => showDialog<void>(

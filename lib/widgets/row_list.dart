@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../data/bracket.dart';
+import '../data/championship.dart';
 import '../data/rows.dart';
 import '../data/rpg_rows.dart';
 import 'name_dialog.dart';
@@ -34,6 +35,14 @@ typedef EventEditor = ({
     PartyScore result,
   )
   playMatch,
+  Future<void> Function(
+    int eventId, {
+    bool? returnLeg,
+    Playoffs? playoffs,
+    ChampionshipPoints? points,
+  })
+  setChampionship,
+  Future<void> Function(int eventId, int gameId, PartyScore result) playFixture,
 });
 
 class RowList extends StatelessWidget {
@@ -352,7 +361,15 @@ class _MasterDetailState extends State<_MasterDetail> {
   /// vide du premier tour y place un joueur inscrit ; un clic sur les
   /// scores d'un match prêt (deux joueurs, jeu de l'événement choisi) les
   /// fait saisir, et le match devient une partie.
-  Widget _eventBracket(int eventId, List<List<BracketMatch>> bracket) {
+  ///
+  /// Sans [pickable] (playoffs d'un championnat), les joueurs ne se
+  /// choisissent pas : ce sont les premiers du classement.
+  Widget _eventBracket(
+    int eventId,
+    List<List<BracketMatch>> bracket, {
+    bool pickable = true,
+    EdgeInsets padding = const EdgeInsets.only(top: 40, bottom: 16),
+  }) {
     final editor = widget.eventEditor;
     final game = widget.table.eventGame(_selected!)?.$1;
     final registered = <(int, String)>[
@@ -364,10 +381,10 @@ class _MasterDetailState extends State<_MasterDetail> {
     };
     // Bien détaché du jeu de l'événement, au-dessus.
     return Padding(
-      padding: const EdgeInsets.only(top: 40, bottom: 16),
+      padding: padding,
       child: _Bracket(
         bracket,
-        onPick: editor == null
+        onPick: editor == null || !pickable
             ? null
             : (position, side) async {
                 final chosen = await showDialog<(int, String)>(
@@ -410,6 +427,161 @@ class _MasterDetailState extends State<_MasterDetail> {
                   score2: scores.$2,
                 ));
               },
+      ),
+    );
+  }
+
+  /// L'événement choisi est un championnat (type choisi depuis le
+  /// chargement compris).
+  bool _isChampionship() => switch (widget.table.eventId(_selected!)) {
+    final id? =>
+      (_editedEventTypes[id] ?? widget.table.eventType(_selected!)) ==
+          EventType.championnat,
+    null => false,
+  };
+
+  /// Réglages du championnat de l'événement [eventId] : aller simple ou
+  /// aller-retour, playoffs et barème, chacun avec son bouton (connecté).
+  List<Widget> _championshipSettings(int eventId, Championship c) {
+    final editor = widget.eventEditor;
+    return [
+      _ChoiceLine<bool>(
+        value: c.returnLeg,
+        options: const [(false, 'Aller simple'), (true, 'Aller-retour')],
+        empty: 'Aucune formule',
+        tooltip: 'Choisir aller ou aller-retour',
+        onChoose: switch (editor) {
+          final editor? => (v) => editor.setChampionship(eventId, returnLeg: v),
+          null => null,
+        },
+      ),
+      _ChoiceLine<Playoffs>(
+        value: c.playoffs,
+        options: [for (final p in Playoffs.values) (p, p.label)],
+        empty: 'Playoffs non choisis',
+        tooltip: 'Choisir les playoffs',
+        onChoose: switch (editor) {
+          final editor? => (v) => editor.setChampionship(eventId, playoffs: v),
+          null => null,
+        },
+      ),
+      _PointsLine(
+        c.points,
+        onChoose: switch (editor) {
+          final editor? => (v) => editor.setChampionship(eventId, points: v),
+          null => null,
+        },
+      ),
+    ];
+  }
+
+  /// Championnat de l'événement [eventId] : son classement, son calendrier
+  /// (connecté, une fois le jeu choisi : un clic sur une rencontre fait
+  /// saisir ses scores, et elle devient une partie), puis ses playoffs.
+  Widget _championshipBoard(int eventId, Championship c) {
+    final editor = widget.eventEditor;
+    final game = widget.table.eventGame(_selected!)?.$1;
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    Widget heading(String text) => Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: _text.copyWith(fontSize: 12, color: muted),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 24,
+        children: [
+          if (c.standings.isNotEmpty || editor != null)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (c.standings.isNotEmpty) heading('Classement'),
+                _Standings(
+                  key: ValueKey(('classement', _selected)),
+                  c.standings,
+                  glory: c.points.glory,
+                  onTap: switch (widget.onNavigate) {
+                    final go? => (id) => go('joueur', id),
+                    null => null,
+                  },
+                  // Connecté : inscrire ou retirer des joueurs ; pas ceux qui
+                  // ont déjà joué.
+                  locked: widget.table.eventPlayedBy(_selected!),
+                  onRemove: switch (editor) {
+                    final editor? => (player) => editor.remove(eventId, player),
+                    null => null,
+                  },
+                  onAdd: switch (editor) {
+                    final editor? => () async {
+                      final chosen = await showDialog<(int, String)>(
+                        context: context,
+                        builder: (_) => AccentScope(
+                          style: AccentStyle.of(context),
+                          child: _PlayerPicker(
+                            title: 'Ajouter un joueur',
+                            players: editor.players(),
+                            exclude: {for (final s in c.standings) s.player.$1},
+                          ),
+                        ),
+                      );
+                      if (chosen != null) await editor.add(eventId, chosen.$1);
+                    },
+                    null => null,
+                  },
+                ),
+              ],
+            ),
+          if (c.fixtures.isNotEmpty)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                heading('Calendrier'),
+                _Calendar(
+                  c.fixtures,
+                  onPlay: (editor == null || game == null)
+                      ? null
+                      : (f) async {
+                          final scores = await showDialog<(int, int)>(
+                            context: context,
+                            builder: (_) => AccentScope(
+                              style: AccentStyle.of(context),
+                              child: _ScoreDialog(
+                                f.player1.$2,
+                                f.player2.$2,
+                                allowDraw: true,
+                              ),
+                            ),
+                          );
+                          if (scores == null) return;
+                          await editor.playFixture(eventId, game, (
+                            player1: f.player1.$1,
+                            player2: f.player2.$1,
+                            score1: scores.$1,
+                            score2: scores.$2,
+                          ));
+                        },
+                ),
+              ],
+            ),
+          if (c.playoffBracket case final bracket?)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                heading('Playoffs'),
+                _eventBracket(
+                  eventId,
+                  bracket,
+                  pickable: false,
+                  padding: const EdgeInsets.only(top: 8, bottom: 16),
+                ),
+              ],
+            ),
+        ],
       ),
     );
   }
@@ -789,6 +961,17 @@ class _MasterDetailState extends State<_MasterDetail> {
                             null => null,
                           },
                         ),
+                      // Championnat : aller ou aller-retour, playoffs et
+                      // barème, choisis de la même façon.
+                      if ((
+                            table.eventId(_selected!),
+                            table.eventChampionship(_selected!),
+                          )
+                          case (final id?, final c?)
+                          when (_editedEventTypes[id] ??
+                                  table.eventType(_selected!)) ==
+                              EventType.championnat)
+                        ..._championshipSettings(id, c),
                       // Puis son jeu, choisi de la même façon.
                       if (table.eventId(_selected!) case final id?)
                         _EventGameLine(
@@ -810,8 +993,20 @@ class _MasterDetailState extends State<_MasterDetail> {
                                   table.eventType(_selected!)) ==
                               EventType.elimination)
                         _eventBracket(id, bracket),
-                      // Un événement : ceux qui y ont joué, triables.
-                      if (table.eventDetail(_selected!) case final e?)
+                      // Championnat : classement, calendrier et playoffs.
+                      if ((
+                            table.eventId(_selected!),
+                            table.eventChampionship(_selected!),
+                          )
+                          case (final id?, final c?)
+                          when (_editedEventTypes[id] ??
+                                  table.eventType(_selected!)) ==
+                              EventType.championnat)
+                        _championshipBoard(id, c),
+                      // Un événement : ceux qui y ont joué, triables. Pas
+                      // pour un championnat : son classement les montre.
+                      if (table.eventDetail(_selected!) case final e?
+                          when !_isChampionship())
                         Padding(
                           // Puis, un peu plus bas, la liste de ses parties.
                           padding: const EdgeInsets.only(top: 16, bottom: 24),
@@ -3062,13 +3257,15 @@ class _BracketLinesPainter extends CustomPainter {
 }
 
 /// Fenêtre au design des cartes pour saisir les scores d'un match du
-/// tableau, entre [player1] et [player2]. Pas d'égalité : il faut un
-/// vainqueur. Renvoie les deux scores.
+/// tableau, entre [player1] et [player2]. Pas d'égalité, sauf avec
+/// [allowDraw] (championnat) : il faut un vainqueur. Renvoie les deux
+/// scores.
 class _ScoreDialog extends StatefulWidget {
-  const _ScoreDialog(this.player1, this.player2);
+  const _ScoreDialog(this.player1, this.player2, {this.allowDraw = false});
 
   final String player1;
   final String player2;
+  final bool allowDraw;
 
   @override
   State<_ScoreDialog> createState() => _ScoreDialogState();
@@ -3091,7 +3288,8 @@ class _ScoreDialogState extends State<_ScoreDialog> {
     final s2 = int.tryParse(_score2.text);
     final error = switch ((s1, s2)) {
       (null, _) || (_, null) => 'Saisissez les deux scores.',
-      (final a?, final b?) when a == b => 'Il faut un vainqueur.',
+      (final a?, final b?) when a == b && !widget.allowDraw =>
+        'Il faut un vainqueur.',
       _ => null,
     };
     if (error != null) {
@@ -3174,6 +3372,548 @@ class _ScoreDialogState extends State<_ScoreDialog> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Barème d'un championnat, centré : « Victoire 3 · Nul 1 · Défaite 0 »,
+/// ou la Gloire en guise de points. Avec [onChoose] (connecté), un bouton
+/// rond dessous le fait modifier.
+class _PointsLine extends StatelessWidget {
+  const _PointsLine(this.points, {this.onChoose});
+
+  final ChampionshipPoints points;
+  final Future<void> Function(ChampionshipPoints points)? onChoose;
+
+  @override
+  Widget build(BuildContext context) {
+    final choose = onChoose;
+    return Padding(
+      padding: _cellPadding,
+      child: Column(
+        spacing: 6,
+        children: [
+          Text(
+            points.glory
+                ? 'Points : Gloire gagnée'
+                : 'Victoire ${points.win} · Nul ${points.draw} · '
+                      'Défaite ${points.loss}',
+            textAlign: TextAlign.center,
+            style: _text,
+          ),
+          if (choose != null)
+            AddButton(
+              icon: Icons.edit,
+              label: 'Modifier les points',
+              onPressed: () async {
+                final chosen = await showDialog<ChampionshipPoints>(
+                  context: context,
+                  builder: (_) => AccentScope(
+                    style: AccentStyle.of(context),
+                    child: _PointsDialog(points),
+                  ),
+                );
+                if (chosen != null) await choose(chosen);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fenêtre au design des cartes pour régler le barème d'un championnat :
+/// les points à la victoire, au nul et à la défaite, ou la Gloire gagnée en
+/// guise de points. Renvoie le barème.
+class _PointsDialog extends StatefulWidget {
+  const _PointsDialog(this.points);
+
+  final ChampionshipPoints points;
+
+  @override
+  State<_PointsDialog> createState() => _PointsDialogState();
+}
+
+class _PointsDialogState extends State<_PointsDialog> {
+  late final _win = TextEditingController(text: '${widget.points.win}');
+  late final _draw = TextEditingController(text: '${widget.points.draw}');
+  late final _loss = TextEditingController(text: '${widget.points.loss}');
+  late bool _glory = widget.points.glory;
+  String? _error;
+
+  @override
+  void dispose() {
+    _win.dispose();
+    _draw.dispose();
+    _loss.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final (win, draw, loss) = (
+      int.tryParse(_win.text),
+      int.tryParse(_draw.text),
+      int.tryParse(_loss.text),
+    );
+    if (win == null || draw == null || loss == null) {
+      setState(() => _error = 'Saisissez les trois nombres de points.');
+      return;
+    }
+    Navigator.of(context)
+        .pop((win: win, draw: draw, loss: loss, glory: _glory));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    Widget field(String label, TextEditingController controller) => Row(
+      spacing: 12,
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: _glory ? _text.copyWith(color: muted) : _text,
+          ),
+        ),
+        SizedBox(
+          width: 72,
+          child: TextField(
+            controller: controller,
+            enabled: !_glory,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(labelText: 'Points'),
+            onSubmitted: (_) => _submit(),
+          ),
+        ),
+      ],
+    );
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: SizedBox(
+        width: 340,
+        child: CardSurface(
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 12,
+              children: [
+                const Text(
+                  'Points du championnat',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 18),
+                ),
+                Row(
+                  spacing: 12,
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Gloire gagnée en guise de points',
+                        style: _text,
+                      ),
+                    ),
+                    Switch(
+                      value: _glory,
+                      activeThumbColor: AccentStyle.of(context).color,
+                      onChanged: (v) => setState(() => _glory = v),
+                    ),
+                  ],
+                ),
+                field('Victoire', _win),
+                field('Nul', _draw),
+                field('Défaite', _loss),
+                if (_error case final error?)
+                  Text(
+                    error,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFFE5534B),
+                    ),
+                  ),
+                OverflowBar(
+                  alignment: MainAxisAlignment.end,
+                  spacing: 8,
+                  overflowAlignment: OverflowBarAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: TextButton.styleFrom(foregroundColor: muted),
+                      child: const Text('Annuler'),
+                    ),
+                    FilledButton(
+                      onPressed: _submit,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AccentStyle.of(context).color,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Enregistrer'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Classement d'un championnat, au style des listes : le rang et le nom,
+/// puis les rencontres jouées (J), gagnées (V), nulles (N), perdues (D) et
+/// les points ; ou bien, avec [glory], la Gloire en premier, devant les
+/// rencontres. Triable par chaque colonne ; le rang reste celui du
+/// classement.
+class _Standings extends StatefulWidget {
+  const _Standings(
+    this.standings, {
+    super.key,
+    this.glory = false,
+    this.onTap,
+    this.onRemove,
+    this.onAdd,
+    this.locked = const {},
+  });
+
+  /// Dans l'ordre du classement.
+  final List<Standing> standings;
+  final bool glory;
+
+  /// Si non nul : chaque joueur est cliquable (son id).
+  final ValueChanged<int>? onTap;
+
+  /// Si non nul : une croix retire chaque joueur, sauf ceux de [locked].
+  final Future<void> Function(int playerId)? onRemove;
+  final Set<int> locked;
+
+  /// Si non nul : un bouton sous le classement ajoute un joueur ; sans
+  /// joueur, « Aucun joueur. » au-dessus.
+  final VoidCallback? onAdd;
+
+  static const double _countWidth = 36;
+
+  /// La colonne Gloire, plus large.
+  static const double _gloryWidth = 72;
+
+  @override
+  State<_Standings> createState() => _StandingsState();
+}
+
+/// Colonne de tri du classement.
+enum _StandingSort { name, score, played, wins, draws, losses }
+
+class _StandingsState extends State<_Standings> {
+  /// Par défaut : l'ordre du classement (points décroissants).
+  _StandingSort _sortBy = _StandingSort.score;
+  bool _ascending = false;
+
+  /// La colonne déjà triée inverse le sens ; sinon, par nom de A à Z ou
+  /// par nombre décroissant.
+  void _sort(_StandingSort by) => setState(() {
+    _ascending = by == _sortBy ? !_ascending : by == _StandingSort.name;
+    _sortBy = by;
+  });
+
+  /// Nombre de [s] dans la colonne [by] (0 pour le nom).
+  static int _count(Standing s, _StandingSort by) => switch (by) {
+    _StandingSort.score => s.points,
+    _StandingSort.played => s.played,
+    _StandingSort.wins => s.wins,
+    _StandingSort.draws => s.draws,
+    _StandingSort.losses => s.losses,
+    _StandingSort.name => 0,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final add = widget.onAdd;
+    final remove = widget.onRemove;
+    final glory = widget.glory;
+    if (widget.standings.isEmpty) {
+      if (add == null) return const SizedBox.shrink();
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          spacing: 12,
+          children: [
+            Text('Aucun joueur.', style: _text.copyWith(color: muted)),
+            AddButton(
+              icon: Icons.person_add,
+              label: 'Ajouter un joueur',
+              onPressed: add,
+            ),
+          ],
+        ),
+      );
+    }
+    final ranks = {
+      for (final (i, s) in widget.standings.indexed) s.player.$1: i + 1,
+    };
+    final direction = _ascending ? 1 : -1;
+    // Par nombre : à égalité, l'ordre du classement.
+    final rows = [...widget.standings]
+      ..sort((a, b) {
+        if (_sortBy == _StandingSort.name) {
+          return direction * compareNames(a.player.$2, b.player.$2);
+        }
+        final byValue =
+            direction * _count(a, _sortBy).compareTo(_count(b, _sortBy));
+        return byValue != 0
+            ? byValue
+            : ranks[a.player.$1]!.compareTo(ranks[b.player.$1]!);
+      });
+
+    // Les colonnes de nombres, dans l'ordre affiché : (tri, largeur).
+    const counts = [
+      _StandingSort.played,
+      _StandingSort.wins,
+      _StandingSort.draws,
+      _StandingSort.losses,
+    ];
+    final columns = [
+      if (glory) (_StandingSort.score, _Standings._gloryWidth),
+      for (final c in counts) (c, _Standings._countWidth),
+      if (!glory) (_StandingSort.score, _scoreWidth),
+    ];
+    String title(_StandingSort by) => switch (by) {
+      _StandingSort.score => glory ? 'Gloire' : 'Pts',
+      _StandingSort.played => 'J',
+      _StandingSort.wins => 'V',
+      _StandingSort.draws => 'N',
+      _StandingSort.losses => 'D',
+      _StandingSort.name => 'Nom',
+    };
+    // Place de la croix (connecté), pour aligner l'en-tête.
+    const removeWidth = 24.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DecoratedBox(
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: dividerColor)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _SortHeader(
+                    'Nom',
+                    arrow: _sortBy == _StandingSort.name ? _ascending : null,
+                    onTap: () => _sort(_StandingSort.name),
+                  ),
+                ),
+              ),
+              for (final (by, width) in columns)
+                Padding(
+                  padding: const EdgeInsets.only(left: 10),
+                  child: SizedBox(
+                    width: width,
+                    // Le titre à droite, comme les nombres ; la flèche
+                    // dessinée à sa gauche, sans prendre de place.
+                    child: InkWell(
+                      onTap: () => _sort(by),
+                      hoverColor: Colors.transparent,
+                      child: HoverBulge(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4.5),
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Text(
+                                  title(by),
+                                  style: _text.copyWith(
+                                    fontSize: 12,
+                                    color: muted,
+                                  ),
+                                ),
+                                if (_sortBy == by)
+                                  Positioned(
+                                    left: -14,
+                                    top: 0,
+                                    bottom: 0,
+                                    child: Icon(
+                                      _ascending
+                                          ? Icons.arrow_upward
+                                          : Icons.arrow_downward,
+                                      size: 12,
+                                      color: muted,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              // Les marges de droite des lignes, et leur croix.
+              SizedBox(
+                width:
+                    _cellPadding.right +
+                    (remove != null ? 10 + removeWidth : 0),
+              ),
+            ],
+          ),
+        ),
+        for (final s in rows)
+          _detailRow(
+            onTap: switch (widget.onTap) {
+              final tap? => () => tap(s.player.$1),
+              null => null,
+            },
+            child: Row(
+              spacing: 10,
+              children: [
+                Expanded(
+                  child: Text(
+                    '${ranks[s.player.$1]}. ${s.player.$2}',
+                    style: _text,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                for (final (by, width) in columns)
+                  SizedBox(
+                    width: width,
+                    child: Text(
+                      '${_count(s, by)}',
+                      style: _text,
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                // Connecté : retirer ce joueur (pas s'il a déjà joué).
+                if (remove != null)
+                  SizedBox.square(
+                    dimension: removeWidth,
+                    child: widget.locked.contains(s.player.$1)
+                        ? null
+                        : IconButton(
+                            tooltip: "Retirer de l'événement",
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(
+                              width: removeWidth,
+                              height: removeWidth,
+                            ),
+                            iconSize: 16,
+                            color: muted,
+                            onPressed: () => remove(s.player.$1),
+                            icon: const Icon(Icons.close),
+                          ),
+                  ),
+              ],
+            ),
+          ),
+        if (add != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Center(
+              child: AddButton(
+                icon: Icons.person_add,
+                label: 'Ajouter un joueur',
+                onPressed: add,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Calendrier d'un championnat, journée par journée : chaque rencontre sur
+/// une ligne, joueur 1, scores, joueur 2 (le vainqueur en gras, le perdant
+/// grisé). Avec [onPlay] (connecté), un clic sur les scores d'une rencontre
+/// à jouer les fait saisir.
+class _Calendar extends StatelessWidget {
+  const _Calendar(this.fixtures, {this.onPlay});
+
+  final List<Fixture> fixtures;
+  final Future<void> Function(Fixture fixture)? onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AccentStyle.of(context);
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final play = onPlay;
+    final days = <int, List<Fixture>>{};
+    for (final f in fixtures) {
+      days.putIfAbsent(f.day, () => []).add(f);
+    }
+
+    Widget line(Fixture f) {
+      final played = isFixturePlayed(f);
+      final diff = played ? f.score1!.compareTo(f.score2!) : 0;
+      TextStyle style(int sign) => !played || diff == 0
+          ? _text
+          : diff == sign
+          ? _text.copyWith(fontWeight: FontWeight.bold)
+          : _text.copyWith(color: muted);
+      final scores = played
+          ? '${f.score1} – ${f.score2}'
+          : (play != null ? '+' : '–');
+      return _detailRow(
+        child: Row(
+          spacing: 10,
+          children: [
+            Expanded(
+              child: Text(
+                f.player1.$2,
+                style: style(1),
+                textAlign: TextAlign.right,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            InkWell(
+              onTap: !played && play != null ? () => play(f) : null,
+              hoverColor: accent.hover,
+              child: SizedBox(
+                width: 72,
+                child: Text(
+                  scores,
+                  textAlign: TextAlign.center,
+                  style: played ? _text : _text.copyWith(color: muted),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                f.player2.$2,
+                style: style(-1),
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final MapEntry(key: day, value: list) in days.entries) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'Journée ${day + 1}',
+              textAlign: TextAlign.center,
+              style: _text.copyWith(fontSize: 12, color: muted),
+            ),
+          ),
+          for (final f in list) line(f),
+        ],
+      ],
     );
   }
 }
