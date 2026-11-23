@@ -128,11 +128,14 @@ class MyHomePage extends StatefulWidget {
     this.loadRpgPartyOptions = fetchRpgPartyOptions,
     this.writeSummary = saveSummary,
     this.writeEventType = saveEventType,
+    this.writeEventRounds = saveEventRounds,
     this.writeEventGame = saveEventGame,
     this.eventPlayers = (
       players: fetchPlayers,
       add: addEventPlayer,
       remove: removeEventPlayer,
+      setBracketPlayer: setBracketPlayer,
+      playBracketMatch: playBracketMatch,
     ),
     this.writeRpgSummary = saveRpgSummary,
     this.uploadPhoto = pickAndUploadPhoto,
@@ -152,6 +155,10 @@ class MyHomePage extends StatefulWidget {
 
   /// Choix du jeu d'un événement Wargame (backoffice).
   final Future<void> Function(int eventId, int gameId) writeEventGame;
+
+  /// Choix du nombre de tours d'une élimination Wargame (backoffice).
+  final Future<void> Function(int eventId, EliminationRound rounds)
+  writeEventRounds;
 
   /// Choix du type d'un événement Wargame (backoffice).
   final Future<void> Function(int eventId, EventType type) writeEventType;
@@ -262,6 +269,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       saveSummary: widget.writeSummary,
                       addPhoto: widget.uploadPhoto,
                       saveEventType: widget.writeEventType,
+                      saveEventRounds: widget.writeEventRounds,
                       eventPlayers: widget.eventPlayers,
                       saveEventGame: widget.writeEventGame,
                     ),
@@ -400,6 +408,7 @@ class GamePage extends StatefulWidget {
     this.addRpgParty,
     this.loadRpgPartyOptions,
     this.saveEventType,
+    this.saveEventRounds,
     this.eventPlayers,
     this.saveEventGame,
   });
@@ -409,6 +418,10 @@ class GamePage extends StatefulWidget {
 
   /// Joueurs d'un événement ; null : pas sur cette page (RPG).
   final EventPlayersEditor? eventPlayers;
+
+  /// Choix du nombre de tours d'une élimination ; null : pas sur cette page.
+  final Future<void> Function(int eventId, EliminationRound rounds)?
+  saveEventRounds;
 
   /// Choix du type d'un événement ; null : pas sur cette page (RPG).
   final Future<void> Function(int eventId, EventType type)? saveEventType;
@@ -533,6 +546,14 @@ class _GamePageState extends State<GamePage> {
         _reloadEvent(event);
       },
       // Une partie de l'événement : seulement entre ses joueurs.
+      setBracketPlayer: (event, position, side, player) async {
+        await players.setBracketPlayer(event, position, side, player);
+        _reloadEvent(event);
+      },
+      playMatch: (event, game, round, position, result) async {
+        await players.playBracketMatch(event, game, round, position, result);
+        _reloadEvent(event);
+      },
       setGame: (event, game) async {
         await saveGame(event, game);
         _reloadEvent(event);
@@ -716,6 +737,9 @@ class _GamePageState extends State<GamePage> {
                               // Connecté : type des événements Wargame.
                               onSetEventType: signedIn
                                   ? widget.saveEventType
+                                  : null,
+                              onSetEventRounds: signedIn
+                                  ? widget.saveEventRounds
                                   : null,
                               // Connecté : joueurs et parties des événements.
                               eventEditor: signedIn ? _eventEditor : null,

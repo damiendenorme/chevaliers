@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'bracket.dart';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -25,6 +27,8 @@ class RowTable {
     this.eventDetails,
     this.eventIds,
     this.eventTypes,
+    this.eventRounds,
+    this.eventBrackets,
     this.eventPlayed,
     this.eventGames,
     this.gameOptions = const [],
@@ -136,6 +140,18 @@ class RowTable {
 
   (int, String)? eventGame(int index) => eventGames?[index];
   EventType? eventType(int index) => eventTypes?[index];
+
+  /// Pour les événements Wargame à élimination : leur premier tour (null :
+  /// pas encore choisi).
+  final List<EliminationRound?>? eventRounds;
+
+  EliminationRound? eventRound(int index) => eventRounds?[index];
+
+  /// Pour les événements Wargame dont le nombre de tours est choisi : leur
+  /// tableau (voir [buildBracket]).
+  final List<List<List<BracketMatch>>?>? eventBrackets;
+
+  List<List<BracketMatch>>? eventBracket(int index) => eventBrackets?[index];
 
   /// Pour les parties de JDR : chaque ligne est une partie, affichée dans le
   /// détail à la manière d'une partie de Wargame, à la place de ses colonnes.
@@ -708,15 +724,21 @@ Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
     boardGames,
     registrations,
     (:games, :places, :dates, :ids, :events),
+    matches,
   ) = await (
     db
         .from('evenement')
-        .select('id, nom, date, type, jeu_id')
+        .select('id, nom, date, type, tours, jeu_id')
         .order('nom', ascending: true),
     db.from('joueur').select('id, nom'),
     db.from('jeu').select('id, nom'),
     db.from('evenement_joueur').select('evenement_id, joueur_id'),
     _fetchGames(db, ''),
+    db
+        .from('evenement_match')
+        .select(
+          'evenement_id, tour, position, joueur1_id, joueur2_id, partie_id',
+        ),
   ).wait;
   final playerNames = {
     for (final p in players) p['id'] as int: p['nom'] as String,
@@ -725,6 +747,38 @@ Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
     for (final j in boardGames) j['id'] as int: j['nom'] as String,
   };
   final eventIds = [for (final r in rows) r['id'] as int];
+  // Résultat de chaque partie, par id, pour les tableaux.
+  final partyScores = {
+    for (final (i, g) in games.indexed)
+      ids[i]: (
+        player1: g.player1,
+        player2: g.player2,
+        score1: g.score1,
+        score2: g.score2,
+      ),
+  };
+
+  /// Tableau de l'événement [r], si son nombre de tours est choisi.
+  List<List<BracketMatch>>? bracket(Map<String, dynamic> r) {
+    final rounds = EliminationRound.fromKey(r['tours'] as String?);
+    if (rounds == null) return null;
+    return buildBracket(
+      rounds.roundCount,
+      [
+        for (final m in matches)
+          if (m['evenement_id'] == r['id'])
+            (
+              round: m['tour'] as int,
+              position: m['position'] as int,
+              player1: m['joueur1_id'] as int?,
+              player2: m['joueur2_id'] as int?,
+              party: m['partie_id'] as int?,
+            ),
+      ],
+      partyScores,
+      playerNames,
+    );
+  }
 
   // Ses joueurs : les inscrits, et ceux qui ont joué à ses parties ; 0 de
   // Gloire tant qu'ils n'ont pas joué.
@@ -743,7 +797,12 @@ Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
   }
 
   return RowTable(
-    banners: [for (final id in eventIds) bannerAsset('evenement', id)],
+    // Bannière : celle du jeu de l'événement ; aucune tant qu'il n'est pas
+    // choisi.
+    banners: [
+      for (final r in rows)
+        if (r['jeu_id'] case final int game) bannerAsset('jeu', game) else null,
+    ],
     // La date seulement dans la liste, pas dans le détail.
     dates: [
       for (final r in rows)
@@ -753,6 +812,10 @@ Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
     rowIds: eventIds,
     eventIds: eventIds,
     eventTypes: [for (final r in rows) EventType.fromKey(r['type'] as String?)],
+    eventRounds: [
+      for (final r in rows) EliminationRound.fromKey(r['tours'] as String?),
+    ],
+    eventBrackets: [for (final r in rows) bracket(r)],
     eventGames: [
       for (final r in rows)
         if (r['jeu_id'] case final int id) (id, gameNames[id]!) else null,
@@ -1007,6 +1070,88 @@ enum EventType {
   ].firstOrNull;
 }
 
+/// Nombre de tours d'un événement à élimination : son premier tour.
+enum EliminationRound {
+  demi('demi', 'Demi-finales'),
+  quart('quart', 'Quarts de finale'),
+  huitieme('huitieme', 'Huitièmes de finale'),
+  seizieme('seizieme', 'Seizièmes de finale'),
+  trenteDeuxieme('trente_deuxieme', 'Trente-deuxièmes de finale');
+
+  const EliminationRound(this.key, this.label);
+
+  /// Nombre de tours du tableau, finale comprise : 2 pour des demi-finales,
+  /// 6 pour des trente-deuxièmes de finale.
+  int get roundCount => index + 2;
+
+  /// Valeur en base.
+  final String key;
+
+  /// Nom affiché.
+  final String label;
+
+  /// Depuis la valeur en base (null ou inconnue : pas choisi).
+  static EliminationRound? fromKey(String? key) => [
+    for (final r in values)
+      if (r.key == key) r,
+  ].firstOrNull;
+}
+
+/// Enregistre le nombre de tours de l'événement Wargame [eventId]
+/// (backoffice).
+Future<void> saveEventRounds(int eventId, EliminationRound rounds) => Supabase
+    .instance
+    .client
+    .from('evenement')
+    .update({'tours': rounds.key})
+    .eq('id', eventId);
+
+/// Place [playerId] dans la case [side] (1 : en haut, 2 : en bas) du match
+/// [position] du premier tour du tableau de l'événement [eventId]
+/// (backoffice).
+Future<void> setBracketPlayer(
+  int eventId,
+  int position,
+  int side,
+  int playerId,
+) => Supabase.instance.client.from('evenement_match').upsert({
+  'evenement_id': eventId,
+  'tour': 0,
+  'position': position,
+  'joueur${side}_id': playerId,
+}, onConflict: 'evenement_id,tour,position');
+
+/// Joue le match [position] du tour [round] du tableau de l'événement
+/// [eventId] (backoffice) : enregistre sa partie, au jeu [gameId], et la
+/// rattache au match. Son vainqueur passe au tour suivant.
+Future<void> playBracketMatch(
+  int eventId,
+  int gameId,
+  int round,
+  int position,
+  PartyScore result,
+) async {
+  final db = Supabase.instance.client;
+  final party = await db
+      .from('partie')
+      .insert({
+        'joueur1_id': result.player1,
+        'joueur2_id': result.player2,
+        'score_joueur1': result.score1,
+        'score_joueur2': result.score2,
+        'jeu_id': gameId,
+        'evenement_id': eventId,
+      })
+      .select('id')
+      .single();
+  await db.from('evenement_match').upsert({
+    'evenement_id': eventId,
+    'tour': round,
+    'position': position,
+    'partie_id': party['id'],
+  }, onConflict: 'evenement_id,tour,position');
+}
+
 /// Enregistre le type de l'événement Wargame [eventId]. Backoffice :
 /// réservé aux connectés.
 Future<void> saveEventType(int eventId, EventType type) => Supabase
@@ -1028,6 +1173,16 @@ typedef EventPlayersEditor = ({
   Future<List<(int, String)>> Function() players,
   Future<void> Function(int eventId, int playerId) add,
   Future<void> Function(int eventId, int playerId) remove,
+  Future<void> Function(int eventId, int position, int side, int playerId)
+  setBracketPlayer,
+  Future<void> Function(
+    int eventId,
+    int gameId,
+    int round,
+    int position,
+    PartyScore result,
+  )
+  playBracketMatch,
 });
 
 /// Tous les joueurs Wargame (id, nom), par nom.

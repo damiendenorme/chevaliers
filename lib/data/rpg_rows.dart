@@ -216,8 +216,17 @@ Future<RowTable?> fetchRpgSessionRows(String table) async {
           for (final e in sorted)
             if (e['date'] case final String d) DateTime.parse(d) else null,
         ],
+        // Bannière : celle du jeu de sa première partie (les parties sont de
+        // la plus récente à la plus ancienne) ; aucune sans partie.
         banners: [
-          for (final e in sorted) bannerAsset('rpg_evenement', e['id'] as int),
+          for (final e in sorted)
+            switch ([
+              for (final s in sessions)
+                if (s.event == e['id']) s,
+            ].lastOrNull) {
+              final s? => bannerAsset('rpg_jeu', s.game),
+              null => null,
+            },
         ],
         // Ses parties, comme dans le détail d'un jeu ; un clic y mène.
         sessionLines: [

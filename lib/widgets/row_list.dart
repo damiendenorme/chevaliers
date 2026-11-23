@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../data/bracket.dart';
 import '../data/rows.dart';
 import '../data/rpg_rows.dart';
 import 'name_dialog.dart';
@@ -23,6 +24,16 @@ typedef EventEditor = ({
   Future<void> Function(int eventId, int playerId) remove,
   void Function(int eventId, int gameId, List<(int, String)> players) addParty,
   Future<void> Function(int eventId, int gameId) setGame,
+  Future<void> Function(int eventId, int position, int side, int playerId)
+  setBracketPlayer,
+  Future<void> Function(
+    int eventId,
+    int gameId,
+    int round,
+    int position,
+    PartyScore result,
+  )
+  playMatch,
 });
 
 class RowList extends StatelessWidget {
@@ -36,9 +47,15 @@ class RowList extends StatelessWidget {
     this.onNavigate,
     this.selectId,
     this.onSetEventType,
+    this.onSetEventRounds,
     this.eventEditor,
     this.onAddEventSession,
   });
+
+  /// Si non nul : le nombre de tours d'une élimination se choisit
+  /// (backoffice).
+  final Future<void> Function(int eventId, EliminationRound rounds)?
+  onSetEventRounds;
 
   /// Si non nul : un bouton ajoute une partie de JDR à l'événement affiché
   /// (backoffice), avec son id.
@@ -134,6 +151,7 @@ class RowList extends StatelessWidget {
           onNavigate: onNavigate,
           selectId: selectId,
           onSetEventType: onSetEventType,
+          onSetEventRounds: onSetEventRounds,
           eventEditor: eventEditor,
           onAddEventSession: onAddEventSession,
         );
@@ -262,11 +280,16 @@ class _MasterDetail extends StatefulWidget {
     this.onNavigate,
     this.selectId,
     this.onSetEventType,
+    this.onSetEventRounds,
     this.eventEditor,
     this.onAddEventSession,
   });
 
   final RowTable table;
+
+  /// Connecté : choix du nombre de tours des éliminations.
+  final Future<void> Function(int eventId, EliminationRound rounds)?
+  onSetEventRounds;
 
   /// Connecté (RPG) : ajout d'une partie à un événement.
   final ValueChanged<int>? onAddEventSession;
@@ -314,6 +337,9 @@ class _MasterDetailState extends State<_MasterDetail> {
   /// affichés sans recharger la liste.
   final _editedEventTypes = <int, EventType>{};
 
+  /// Nombres de tours choisis depuis le chargement, par id d'événement.
+  final _editedEventRounds = <int, EliminationRound>{};
+
   /// Photos ajoutées depuis le chargement, par id de partie : affichées sans
   /// recharger la liste.
   final _addedPhotos = <int, List<String>>{};
@@ -321,6 +347,72 @@ class _MasterDetailState extends State<_MasterDetail> {
   /// MJ et joueurs des parties de JDR modifiés depuis le chargement, par id
   /// de partie : affichés sans recharger la liste.
   final _editedGuests = <int, (List<(int, String)>, List<(int, String)>)>{};
+
+  /// Tableau de l'événement [eventId]. Connecté : un clic sur une case
+  /// vide du premier tour y place un joueur inscrit ; un clic sur les
+  /// scores d'un match prêt (deux joueurs, jeu de l'événement choisi) les
+  /// fait saisir, et le match devient une partie.
+  Widget _eventBracket(int eventId, List<List<BracketMatch>> bracket) {
+    final editor = widget.eventEditor;
+    final game = widget.table.eventGame(_selected!)?.$1;
+    final registered = <(int, String)>[
+      for (final p in widget.table.eventDetail(_selected!)?.players ?? const [])
+        (p.id, p.name),
+    ];
+    final placed = {
+      for (final m in bracket.first) ...[?m.player1?.$1, ?m.player2?.$1],
+    };
+    // Bien détaché du jeu de l'événement, au-dessus.
+    return Padding(
+      padding: const EdgeInsets.only(top: 40, bottom: 16),
+      child: _Bracket(
+        bracket,
+        onPick: editor == null
+            ? null
+            : (position, side) async {
+                final chosen = await showDialog<(int, String)>(
+                  context: context,
+                  builder: (_) => AccentScope(
+                    style: AccentStyle.of(context),
+                    child: _PlayerPicker(
+                      title: 'Choisir un joueur',
+                      players: Future.value(
+                        registered..sort((a, b) => compareNames(a.$2, b.$2)),
+                      ),
+                      exclude: placed,
+                    ),
+                  ),
+                );
+                if (chosen != null) {
+                  await editor.setBracketPlayer(
+                    eventId,
+                    position,
+                    side,
+                    chosen.$1,
+                  );
+                }
+              },
+        onPlay: (editor == null || game == null)
+            ? null
+            : (round, position, match) async {
+                final scores = await showDialog<(int, int)>(
+                  context: context,
+                  builder: (_) => AccentScope(
+                    style: AccentStyle.of(context),
+                    child: _ScoreDialog(match.player1!.$2, match.player2!.$2),
+                  ),
+                );
+                if (scores == null) return;
+                await editor.playMatch(eventId, game, round, position, (
+                  player1: match.player1!.$1,
+                  player2: match.player2!.$1,
+                  score1: scores.$1,
+                  score2: scores.$2,
+                ));
+              },
+      ),
+    );
+  }
 
   /// Détail d'une partie de JDR, avec la modification de ses joueurs si
   /// connecté.
@@ -652,13 +744,46 @@ class _MasterDetailState extends State<_MasterDetail> {
                       // Un événement Wargame : son type, et le bouton pour le
                       // choisir une fois connecté.
                       if (table.eventId(_selected!) case final id?)
-                        _EventTypeLine(
-                          _editedEventTypes[id] ?? table.eventType(_selected!),
+                        _ChoiceLine<EventType>(
+                          value:
+                              _editedEventTypes[id] ??
+                              table.eventType(_selected!),
+                          options: [
+                            for (final t in EventType.values) (t, t.label),
+                          ],
+                          empty: 'Aucun type',
+                          tooltip: 'Choisir le type',
                           onChoose: switch (widget.onSetEventType) {
                             final set? => (type) async {
                               await set(id, type);
                               if (mounted) {
                                 setState(() => _editedEventTypes[id] = type);
+                              }
+                            },
+                            null => null,
+                          },
+                        ),
+                      // Élimination : son nombre de tours (premier tour),
+                      // choisi de la même façon.
+                      if (table.eventId(_selected!) case final id?
+                          when (_editedEventTypes[id] ??
+                                  table.eventType(_selected!)) ==
+                              EventType.elimination)
+                        _ChoiceLine<EliminationRound>(
+                          value:
+                              _editedEventRounds[id] ??
+                              table.eventRound(_selected!),
+                          options: [
+                            for (final r in EliminationRound.values)
+                              (r, r.label),
+                          ],
+                          empty: 'Aucun nombre de tours',
+                          tooltip: 'Choisir le nombre de tours',
+                          onChoose: switch (widget.onSetEventRounds) {
+                            final set? => (rounds) async {
+                              await set(id, rounds);
+                              if (mounted) {
+                                setState(() => _editedEventRounds[id] = rounds);
                               }
                             },
                             null => null,
@@ -674,6 +799,17 @@ class _MasterDetailState extends State<_MasterDetail> {
                             null => null,
                           },
                         ),
+                      // Élimination dont le nombre de tours est choisi : son
+                      // tableau.
+                      if ((
+                            table.eventId(_selected!),
+                            table.eventBracket(_selected!),
+                          )
+                          case (final id?, final bracket?)
+                          when (_editedEventTypes[id] ??
+                                  table.eventType(_selected!)) ==
+                              EventType.elimination)
+                        _eventBracket(id, bracket),
                       // Un événement : ceux qui y ont joué, triables.
                       if (table.eventDetail(_selected!) case final e?)
                         Padding(
@@ -2554,21 +2690,38 @@ class _Detail extends StatelessWidget {
   }
 }
 
-/// Type d'un événement, sous son nom, centré : sa valeur, sans libellé.
-/// Avec [onChoose] (connecté), un bouton rond dessous ouvre la liste des
-/// types pour le choisir ; sans type et sans
-/// [onChoose], rien.
-class _EventTypeLine extends StatelessWidget {
-  const _EventTypeLine(this.type, {this.onChoose});
+/// Choix d'un événement (type, nombre de tours), centré : sa valeur. Avec
+/// [onChoose] (connecté), un bouton rond dessous ouvre la liste des
+/// [options] pour le choisir ; sans valeur, [empty] (connecté) ou rien.
+class _ChoiceLine<T> extends StatelessWidget {
+  const _ChoiceLine({
+    required this.value,
+    required this.options,
+    required this.empty,
+    required this.tooltip,
+    this.onChoose,
+  });
 
-  final EventType? type;
-  final Future<void> Function(EventType type)? onChoose;
+  final T? value;
+  final List<(T, String)> options;
+
+  /// Texte sans valeur (connecté) : « Aucun type »…
+  final String empty;
+
+  /// Nom du bouton : « Choisir le type »…
+  final String tooltip;
+  final Future<void> Function(T value)? onChoose;
 
   @override
   Widget build(BuildContext context) {
     final choose = onChoose;
-    if (type == null && choose == null) return const SizedBox.shrink();
+    final current = value;
+    if (current == null && choose == null) return const SizedBox.shrink();
     final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    final label = [
+      for (final (v, l) in options)
+        if (v == current) l,
+    ].firstOrNull;
     // Centrés : sa valeur, et dessous le bouton (connecté).
     return Padding(
       padding: _cellPadding,
@@ -2576,18 +2729,18 @@ class _EventTypeLine extends StatelessWidget {
         spacing: 6,
         children: [
           Text(
-            type?.label ?? 'Aucun type',
+            label ?? empty,
             textAlign: TextAlign.center,
-            style: type == null ? _text.copyWith(color: labelColor) : _text,
+            style: label == null ? _text.copyWith(color: labelColor) : _text,
           ),
           if (choose != null)
-            PopupMenuButton<EventType>(
-              tooltip: 'Choisir le type',
-              initialValue: type,
+            PopupMenuButton<T>(
+              tooltip: tooltip,
+              initialValue: current,
               onSelected: choose,
               itemBuilder: (context) => [
-                for (final t in EventType.values)
-                  PopupMenuItem(value: t, child: Text(t.label)),
+                for (final (v, l) in options)
+                  PopupMenuItem(value: v, child: Text(l)),
               ],
               // Le bouton rond des autres modifications ; le menu reçoit le
               // clic.
@@ -2595,7 +2748,7 @@ class _EventTypeLine extends StatelessWidget {
                 child: AddButton(
                   onPressed: () {},
                   icon: Icons.edit,
-                  label: 'Choisir le type',
+                  label: tooltip,
                 ),
               ),
             ),
@@ -2649,6 +2802,377 @@ class _EventGameLine extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Tableau d'une élimination : un tour par colonne, du premier tour à la
+/// finale, chaque match relié par des traits au match du tour suivant où
+/// passe son vainqueur. Défile horizontalement s'il est plus large que la
+/// carte.
+class _Bracket extends StatelessWidget {
+  const _Bracket(this.rounds, {this.onPick, this.onPlay});
+
+  final List<List<BracketMatch>> rounds;
+
+  /// Si non nul : un clic sur une case vide du premier tour (position du
+  /// match, case 1 ou 2) y place un joueur.
+  final Future<void> Function(int position, int side)? onPick;
+
+  /// Si non nul : un clic sur les scores d'un match prêt à jouer les fait
+  /// saisir (tour, position, match).
+  final Future<void> Function(int round, int position, BracketMatch match)?
+  onPlay;
+
+  static const double _boxWidth = 180;
+  static const double _rowHeight = 26;
+  static const double _boxHeight = _rowHeight * 2;
+  static const double _gap = 12;
+  static const double _columnGap = 32;
+  static const double _header = 28;
+
+  /// Haut du match [position] du tour [round] : centré sur les deux matchs
+  /// du tour précédent dont il reçoit les vainqueurs.
+  static double _top(int round, int position) {
+    final block = (_boxHeight + _gap) * (1 << round);
+    return _header + position * block + (block - _boxHeight) / 2;
+  }
+
+  static double _left(int round) => round * (_boxWidth + _columnGap);
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AccentStyle.of(context);
+    final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    final width = _left(rounds.length - 1) + _boxWidth;
+    final height = _header + rounds.first.length * (_boxHeight + _gap);
+    // Centré s'il tient dans la carte ; sinon, il défile.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: constraints.maxWidth - 24),
+          child: Center(
+            child: _board(context, width, height, accent, labelColor),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _board(
+    BuildContext context,
+    double width,
+    double height,
+    AccentStyle accent,
+    Color labelColor,
+  ) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: CustomPaint(
+        painter: _BracketLinesPainter(
+          rounds.map((r) => r.length).toList(),
+          color: accent.border.withValues(alpha: 0.6),
+        ),
+        child: Stack(
+          children: [
+            for (final (r, round) in rounds.indexed) ...[
+              // Nom du tour, au-dessus de sa colonne.
+              Positioned(
+                left: _left(r),
+                top: 0,
+                width: _boxWidth,
+                height: _header,
+                child: Text(
+                  bracketRoundName(rounds.length, r),
+                  textAlign: TextAlign.center,
+                  style: _text.copyWith(fontSize: 12, color: labelColor),
+                ),
+              ),
+              for (final (p, match) in round.indexed)
+                Positioned(
+                  left: _left(r),
+                  top: _top(r, p),
+                  width: _boxWidth,
+                  height: _boxHeight,
+                  child: _BracketBox(
+                    match,
+                    onPick: switch (onPick) {
+                      final pick? when r == 0 && !isPlayed(match) => (
+                        side,
+                      ) => pick(p, side),
+                      _ => null,
+                    },
+                    onPlay: switch (onPlay) {
+                      final play?
+                          when match.player1 != null &&
+                              match.player2 != null &&
+                              !isPlayed(match) =>
+                        () => play(r, p, match),
+                      _ => null,
+                    },
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Un match du tableau : deux lignes (joueur, score). Le vainqueur en gras,
+/// le perdant grisé, comme dans la liste des parties.
+class _BracketBox extends StatelessWidget {
+  const _BracketBox(this.match, {this.onPick, this.onPlay});
+
+  final BracketMatch match;
+
+  /// Si non nul : un clic sur une case (1 ou 2) choisit son joueur.
+  final ValueChanged<int>? onPick;
+
+  /// Si non nul : un clic sur les scores les fait saisir.
+  final VoidCallback? onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AccentStyle.of(context);
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final winner = winnerOf(match);
+    final pick = onPick;
+    final play = onPlay;
+
+    Widget line(int side) {
+      final player = side == 1 ? match.player1 : match.player2;
+      final score = side == 1 ? match.score1 : match.score2;
+      final style = switch (winner) {
+        null => _text,
+        final w when w == player => _text.copyWith(fontWeight: FontWeight.bold),
+        _ => _text.copyWith(color: muted),
+      };
+      return SizedBox(
+        height: _Bracket._rowHeight,
+        child: Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: switch (pick) {
+                  final pick? => () => pick(side),
+                  null => null,
+                },
+                hoverColor: accent.hover,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      player?.$2 ?? (pick != null ? 'Choisir…' : '—'),
+                      style: player == null
+                          ? _text.copyWith(color: muted)
+                          : style,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Le score ; prêt à jouer, un clic le fait saisir.
+            InkWell(
+              onTap: play,
+              hoverColor: accent.hover,
+              child: SizedBox(
+                width: 36,
+                height: _Bracket._rowHeight,
+                child: Center(
+                  child: Text(
+                    score?.toString() ?? (play != null ? '+' : ''),
+                    style: score == null ? _text.copyWith(color: muted) : style,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Material(
+      color: const Color(0x66000000),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(4),
+        side: BorderSide(color: accent.border.withValues(alpha: 0.6)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          line(1),
+          const Divider(height: 0, thickness: 1, color: dividerColor),
+          Expanded(child: line(2)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Traits du tableau : de chaque match vers le match du tour suivant.
+class _BracketLinesPainter extends CustomPainter {
+  const _BracketLinesPainter(this.counts, {required this.color});
+
+  /// Nombre de matchs de chaque tour.
+  final List<int> counts;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+    const half = _Bracket._boxHeight / 2;
+    for (var r = 0; r + 1 < counts.length; r++) {
+      for (var p = 0; p < counts[r]; p++) {
+        final from = Offset(
+          _Bracket._left(r) + _Bracket._boxWidth,
+          _Bracket._top(r, p) + half,
+        );
+        final to = Offset(
+          _Bracket._left(r + 1),
+          _Bracket._top(r + 1, p ~/ 2) + half,
+        );
+        final middle = from.dx + _Bracket._columnGap / 2;
+        canvas.drawPath(
+          Path()
+            ..moveTo(from.dx, from.dy)
+            ..lineTo(middle, from.dy)
+            ..lineTo(middle, to.dy)
+            ..lineTo(to.dx, to.dy),
+          paint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BracketLinesPainter old) =>
+      old.counts.length != counts.length || old.color != color;
+}
+
+/// Fenêtre au design des cartes pour saisir les scores d'un match du
+/// tableau, entre [player1] et [player2]. Pas d'égalité : il faut un
+/// vainqueur. Renvoie les deux scores.
+class _ScoreDialog extends StatefulWidget {
+  const _ScoreDialog(this.player1, this.player2);
+
+  final String player1;
+  final String player2;
+
+  @override
+  State<_ScoreDialog> createState() => _ScoreDialogState();
+}
+
+class _ScoreDialogState extends State<_ScoreDialog> {
+  final _score1 = TextEditingController();
+  final _score2 = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _score1.dispose();
+    _score2.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final s1 = int.tryParse(_score1.text);
+    final s2 = int.tryParse(_score2.text);
+    final error = switch ((s1, s2)) {
+      (null, _) || (_, null) => 'Saisissez les deux scores.',
+      (final a?, final b?) when a == b => 'Il faut un vainqueur.',
+      _ => null,
+    };
+    if (error != null) {
+      setState(() => _error = error);
+      return;
+    }
+    Navigator.of(context).pop((s1!, s2!));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    Widget score(String player, TextEditingController controller) => Row(
+      spacing: 12,
+      children: [
+        Expanded(child: Text(player, style: _text)),
+        SizedBox(
+          width: 72,
+          child: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(labelText: 'Score'),
+            onSubmitted: (_) => _submit(),
+          ),
+        ),
+      ],
+    );
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: SizedBox(
+        width: 340,
+        child: CardSurface(
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 12,
+              children: [
+                const Text(
+                  'Scores du match',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 18),
+                ),
+                score(widget.player1, _score1),
+                score(widget.player2, _score2),
+                if (_error case final error?)
+                  Text(
+                    error,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFFE5534B),
+                    ),
+                  ),
+                OverflowBar(
+                  alignment: MainAxisAlignment.end,
+                  spacing: 8,
+                  overflowAlignment: OverflowBarAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: TextButton.styleFrom(foregroundColor: muted),
+                      child: const Text('Annuler'),
+                    ),
+                    FilledButton(
+                      onPressed: _submit,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AccentStyle.of(context).color,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Enregistrer'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

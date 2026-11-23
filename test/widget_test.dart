@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chevaliers/data/auth.dart';
+import 'package:chevaliers/data/bracket.dart';
 import 'package:chevaliers/data/rows.dart';
 import 'package:chevaliers/data/rpg_rows.dart';
 import 'package:chevaliers/main.dart';
@@ -1474,6 +1475,8 @@ void main() {
               calls.add('remove $event $player');
               registered.removeWhere((p) => p.$1 == player);
             },
+            setBracketPlayer: (_, _, _, _) async {},
+            playBracketMatch: (_, _, _, _, _) async {},
           ),
         ),
       ),
@@ -1996,6 +1999,172 @@ void main() {
     // Affiché aussitôt, la partie reste sélectionnée.
     expect(find.text('Arthur tire l’épée du rocher.'), findsOneWidget);
     expect(find.text('Aucun résumé.'), findsNothing);
+  });
+
+  testWidgets('An elimination event has a number of rounds', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final rounds = <(int, EliminationRound)>[];
+    final auth = FakeAuth();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => const RowTable(
+            columns: ['Nom'],
+            rows: [
+              ['Camlann'],
+              ['Badon'],
+            ],
+            eventIds: [7, 8],
+            eventTypes: [null, EventType.elimination],
+            eventRounds: [null, EliminationRound.huitieme],
+          ),
+          loadCounts: () async =>
+              (players: 0, events: 2, games: 0, boardGames: 0),
+          auth: auth,
+          writeEventType: (_, _) async {},
+          writeEventRounds: (id, r) async => rounds.add((id, r)),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Déconnecté : une élimination montre son premier tour.
+    await tester.tap(inList('Badon'));
+    await tester.pump();
+    expect(inList('Huitièmes de finale'), findsOneWidget);
+
+    // Connecté : sans type, pas de nombre de tours ; avec Élimination, oui.
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+    await tester.tap(inList('Camlann'));
+    await tester.pump();
+    expect(inList('Aucun nombre de tours'), findsNothing);
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w is AddButton && w.label == 'Choisir le type',
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Élimination').last);
+    await tester.pumpAndSettle();
+    expect(inList('Aucun nombre de tours'), findsOneWidget);
+
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w is AddButton && w.label == 'Choisir le nombre de tours',
+      ),
+    );
+    await tester.pumpAndSettle();
+    for (final r in EliminationRound.values) {
+      expect(find.text(r.label), findsOneWidget);
+    }
+    await tester.tap(find.text('Quarts de finale'));
+    await tester.pumpAndSettle();
+    expect(rounds, [(7, EliminationRound.quart)]);
+    expect(inList('Quarts de finale'), findsOneWidget);
+  });
+
+  testWidgets('Signed in, an elimination bracket gets players and scores', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final placed = <(int, int, int, int)>[];
+    final played = <(int, int, int, int, PartyScore)>[];
+    final auth = FakeAuth();
+    // Demi-finales : Arthur contre Bors, à jouer ; la 2e attend ses joueurs.
+    final bracket = buildBracket(
+      2,
+      const [(round: 0, position: 0, player1: 1, player2: 2, party: null)],
+      const {},
+      const {1: 'Arthur', 2: 'Bors', 3: 'Gauvain'},
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => RowTable(
+            columns: const ['Nom'],
+            rows: const [
+              ['Camlann'],
+            ],
+            rowIds: const [7],
+            eventIds: const [7],
+            eventTypes: const [EventType.elimination],
+            eventRounds: const [EliminationRound.demi],
+            eventBrackets: [bracket],
+            eventGames: const [(5, 'Échecs')],
+            eventDetails: const [
+              (
+                players: [
+                  (id: 1, name: 'Arthur', glory: 0),
+                  (id: 2, name: 'Bors', glory: 0),
+                  (id: 3, name: 'Gauvain', glory: 0),
+                ],
+              ),
+            ],
+          ),
+          loadCounts: () async =>
+              (players: 3, events: 1, games: 0, boardGames: 1),
+          auth: auth,
+          eventPlayers: (
+            players: () async => const [],
+            add: (_, _) async {},
+            remove: (_, _) async {},
+            setBracketPlayer: (e, pos, side, player) async =>
+                placed.add((e, pos, side, player)),
+            playBracketMatch: (e, game, round, pos, result) async =>
+                played.add((e, game, round, pos, result)),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(inList('Camlann'));
+    await tester.pump();
+
+    // Les tours, et les joueurs placés.
+    expect(inList('Demi-finales'), findsWidgets);
+    expect(inList('Finale'), findsOneWidget);
+    expect(inList('Arthur'), findsWidgets);
+    expect(find.text('Choisir…'), findsNothing);
+
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+    // Une case vide : on y place un inscrit pas encore placé.
+    await tester.tap(find.text('Choisir…').first);
+    await tester.pumpAndSettle();
+    final picker = find.byType(Dialog);
+    expect(
+      find.descendant(of: picker, matching: find.text('Arthur')),
+      findsNothing,
+    );
+    await tester.tap(
+      find.descendant(of: picker, matching: find.text('Gauvain')),
+    );
+    await tester.pumpAndSettle();
+    expect(placed, [(7, 1, 1, 3)]);
+
+    // Les scores du match prêt : pas d'égalité.
+    await tester.tap(find.text('+').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Scores du match'), findsOneWidget);
+    final scores = find.widgetWithText(TextField, 'Score');
+    await tester.enterText(scores.at(0), '2');
+    await tester.enterText(scores.at(1), '2');
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pump();
+    expect(find.text('Il faut un vainqueur.'), findsOneWidget);
+    await tester.enterText(scores.at(1), '1');
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(played, [
+      (7, 5, 0, 0, (player1: 1, player2: 2, score1: 2, score2: 1)),
+    ]);
   });
 
   testWidgets('A Wargame event has a type, chosen when signed in', (
