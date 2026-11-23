@@ -112,6 +112,7 @@ class MyHomePage extends StatefulWidget {
     this.saveRpgParty = addRpgParty,
     this.loadRpgPartyOptions = fetchRpgPartyOptions,
     this.writeSummary = saveSummary,
+    this.writeEventType = saveEventType,
     this.writeRpgSummary = saveRpgSummary,
     this.uploadPhoto = pickAndUploadPhoto,
     this.uploadRpgPhoto = pickAndUploadRpgPhoto,
@@ -124,6 +125,9 @@ class MyHomePage extends StatefulWidget {
 
   /// Modification des joueurs d'une partie de JDR (backoffice).
   final GuestEditor rpgGuests;
+
+  /// Choix du type d'un événement Wargame (backoffice).
+  final Future<void> Function(int eventId, EventType type) writeEventType;
 
   /// Ajout d'une photo à une partie (backoffice), au Wargame et au RPG.
   final Future<String?> Function(int partyId) uploadPhoto;
@@ -230,6 +234,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       loadPartyOptions: widget.loadPartyOptions,
                       saveSummary: widget.writeSummary,
                       addPhoto: widget.uploadPhoto,
+                      saveEventType: widget.writeEventType,
                     ),
                   ),
                   // RPG : accentuation bronze.
@@ -365,7 +370,11 @@ class GamePage extends StatefulWidget {
     this.loadPartyOptions,
     this.addRpgParty,
     this.loadRpgPartyOptions,
+    this.saveEventType,
   });
+
+  /// Choix du type d'un événement ; null : pas sur cette page (RPG).
+  final Future<void> Function(int eventId, EventType type)? saveEventType;
 
   /// Ajout d'une partie de JDR et ses choix ; null : pas sur cette page.
   final Future<void> Function(NewRpgParty party)? addRpgParty;
@@ -602,6 +611,10 @@ class _GamePageState extends State<GamePage> {
                               onAddPhoto: signedIn ? widget.addPhoto : null,
                               // Connecté : joueurs des parties de JDR.
                               guestEditor: signedIn ? widget.guestEditor : null,
+                              // Connecté : type des événements Wargame.
+                              onSetEventType: signedIn
+                                  ? widget.saveEventType
+                                  : null,
                             );
                           },
                         ),

@@ -1710,6 +1710,66 @@ void main() {
     expect(find.text('Aucun résumé.'), findsNothing);
   });
 
+  testWidgets('A Wargame event has a type, chosen when signed in', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final saved = <(int, EventType)>[];
+    final auth = FakeAuth();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => const RowTable(
+            columns: ['Nom'],
+            rows: [
+              ['Camlann'],
+              ['Badon'],
+            ],
+            eventIds: [7, 8],
+            eventTypes: [null, EventType.suisse],
+          ),
+          loadCounts: () async =>
+              (players: 0, events: 2, games: 0, boardGames: 0),
+          auth: auth,
+          writeEventType: (id, type) async => saved.add((id, type)),
+        ),
+      ),
+    );
+    await tester.pump();
+    final chooser = find.byWidgetPredicate(
+      (w) => w is AddButton && w.label == 'Choisir le type',
+    );
+
+    // Déconnecté : le type en lecture seule ; sans type, rien.
+    await tester.tap(inList('Badon'));
+    await tester.pump();
+    expect(inList('Suisse'), findsOneWidget);
+    expect(chooser, findsNothing);
+    await tester.tap(inList('Camlann'));
+    await tester.pump();
+    expect(inList('Type'), findsNothing);
+
+    // Connecté : « Aucun type » et le bouton, qui propose les quatre types.
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+    expect(inList('Aucun type'), findsOneWidget);
+    await tester.tap(chooser);
+    await tester.pumpAndSettle();
+    expect(find.text('Élimination'), findsOneWidget);
+    expect(find.text('Suisse'), findsOneWidget);
+    expect(find.text('Campagne'), findsOneWidget);
+    await tester.tap(find.text('Championnat'));
+    await tester.pumpAndSettle();
+
+    expect(saved, [(7, EventType.championnat)]);
+    // Affiché aussitôt, l'événement reste sélectionné.
+    expect(inList('Championnat'), findsOneWidget);
+    expect(inList('Aucun type'), findsNothing);
+  });
+
   testWidgets('Signed in, a + under « Aucune photo. » adds a photo', (
     tester,
   ) async {

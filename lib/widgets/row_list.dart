@@ -24,7 +24,12 @@ class RowList extends StatelessWidget {
     this.guestEditor,
     this.onNavigate,
     this.selectId,
+    this.onSetEventType,
   });
+
+  /// Si non nul : le type d'un événement se choisit (backoffice), avec l'id
+  /// de l'événement et le type choisi.
+  final Future<void> Function(int eventId, EventType type)? onSetEventType;
 
   /// Si non nul : les joueurs d'une partie de JDR se retirent et s'ajoutent
   /// (backoffice).
@@ -107,6 +112,7 @@ class RowList extends StatelessWidget {
           guestEditor: guestEditor,
           onNavigate: onNavigate,
           selectId: selectId,
+          onSetEventType: onSetEventType,
         );
       },
     );
@@ -214,9 +220,13 @@ class _MasterDetail extends StatefulWidget {
     this.guestEditor,
     this.onNavigate,
     this.selectId,
+    this.onSetEventType,
   });
 
   final RowTable table;
+
+  /// Connecté : choix du type des événements.
+  final Future<void> Function(int eventId, EventType type)? onSetEventType;
 
   /// Aller à un élément d'un autre onglet (table, id).
   final void Function(String table, int id)? onNavigate;
@@ -250,6 +260,10 @@ class _MasterDetailState extends State<_MasterDetail> {
   /// Résumés modifiés depuis le chargement, par id de partie : affichés sans
   /// recharger la liste (la sélection reste).
   final _editedSummaries = <int, String?>{};
+
+  /// Types d'événements choisis depuis le chargement, par id d'événement :
+  /// affichés sans recharger la liste.
+  final _editedEventTypes = <int, EventType>{};
 
   /// Photos ajoutées depuis le chargement, par id de partie : affichées sans
   /// recharger la liste.
@@ -586,7 +600,22 @@ class _MasterDetailState extends State<_MasterDetail> {
                         )
                       else
                         _Detail(table.entries(_selected!)),
-                      // Un événement JDR : ceux qui y ont joué, triables.
+                      // Un événement Wargame : son type, et le bouton pour le
+                      // choisir une fois connecté.
+                      if (table.eventId(_selected!) case final id?)
+                        _EventTypeLine(
+                          _editedEventTypes[id] ?? table.eventType(_selected!),
+                          onChoose: switch (widget.onSetEventType) {
+                            final set? => (type) async {
+                              await set(id, type);
+                              if (mounted) {
+                                setState(() => _editedEventTypes[id] = type);
+                              }
+                            },
+                            null => null,
+                          },
+                        ),
+                      // Un événement : ceux qui y ont joué, triables.
                       if (table.eventDetail(_selected!) case final e?)
                         Padding(
                           // Puis, un peu plus bas, la liste de ses parties.
@@ -2265,6 +2294,67 @@ class _Detail extends StatelessWidget {
                   ),
                   Text(value, style: _text),
                 ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Type d'un événement, sous son nom, comme ses autres informations :
+/// « Type », puis sa valeur. Avec [onChoose] (connecté), un bouton à
+/// droite ouvre la liste des types pour le choisir ; sans type et sans
+/// [onChoose], rien.
+class _EventTypeLine extends StatelessWidget {
+  const _EventTypeLine(this.type, {this.onChoose});
+
+  final EventType? type;
+  final Future<void> Function(EventType type)? onChoose;
+
+  @override
+  Widget build(BuildContext context) {
+    final choose = onChoose;
+    if (type == null && choose == null) return const SizedBox.shrink();
+    final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: _cellPadding,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Type',
+                  style: _text.copyWith(fontSize: 12, color: labelColor),
+                ),
+                Text(
+                  type?.label ?? 'Aucun type',
+                  style: type == null
+                      ? _text.copyWith(color: labelColor)
+                      : _text,
+                ),
+              ],
+            ),
+          ),
+          if (choose != null)
+            PopupMenuButton<EventType>(
+              tooltip: 'Choisir le type',
+              initialValue: type,
+              onSelected: choose,
+              itemBuilder: (context) => [
+                for (final t in EventType.values)
+                  PopupMenuItem(value: t, child: Text(t.label)),
+              ],
+              // Le bouton rond des autres modifications ; le menu reçoit le
+              // clic.
+              child: IgnorePointer(
+                child: AddButton(
+                  onPressed: () {},
+                  icon: Icons.edit,
+                  label: 'Choisir le type',
+                ),
               ),
             ),
         ],

@@ -23,6 +23,8 @@ class RowTable {
     this.dates,
     this.fullDates = false,
     this.eventDetails,
+    this.eventIds,
+    this.eventTypes,
     this.sessionDetails,
     this.sessionLines,
     this.partyIds,
@@ -109,6 +111,15 @@ class RowTable {
   final List<EventDetail>? eventDetails;
 
   EventDetail? eventDetail(int index) => eventDetails?[index];
+
+  /// Pour les événements Wargame : l'id et le type de chaque événement
+  /// (null : pas encore de type). Avec eux, le détail montre le type, et un
+  /// bouton pour le choisir une fois connecté.
+  final List<int>? eventIds;
+  final List<EventType?>? eventTypes;
+
+  int? eventId(int index) => eventIds?[index];
+  EventType? eventType(int index) => eventTypes?[index];
 
   /// Pour les parties de JDR : chaque ligne est une partie, affichée dans le
   /// détail à la manière d'une partie de Wargame, à la place de ses colonnes.
@@ -240,13 +251,14 @@ List<MatchDetail> _matchDetails({
   required Map<int, String> playerNames,
   required Map<int, String> gameNames,
   bool Function(EloGame game)? where,
+  bool Function(int index)? whereIndex,
   double start = eloStart,
 }) {
   final deltas = eloDeltas(games, start: start);
   final forms = {for (final id in playerNames.keys) id: recentForm(games, id)};
   return [
     for (final (i, g) in games.indexed.toList().reversed)
-      if (where?.call(g) ?? true)
+      if ((where?.call(g) ?? true) && (whereIndex?.call(i) ?? true))
         (
           date: dates[i],
           matchup: (
@@ -275,8 +287,8 @@ typedef SessionDetail = ({
   List<(int, String)> guests,
 });
 
-/// Un événement JDR détaillé : ceux qui ont joué à ses parties (comme MJ ou
-/// joueur), avec la Gloire gagnée à l'événement.
+/// Un événement détaillé : ceux qui ont joué à ses parties (au RPG, comme MJ
+/// ou joueur), avec la Gloire gagnée à l'événement.
 typedef EventDetail = ({List<({int id, String name, int glory})> players});
 
 /// Une partie de JDR sur une ligne : son libellé, puis ses MJ et ses joueurs
@@ -312,13 +324,15 @@ String? resolveImageAsset(String base, Iterable<String> assets) {
 double _start(String prefix) => prefix == 'rpg_' ? rpgEloStart : eloStart;
 
 /// Toutes les parties, dans l'ordre chronologique, pour le calcul du ELO,
-/// avec le lieu, la date et l'id de chacune (même ordre).
+/// avec le lieu, la date, l'id et l'événement (facultatif) de chacune (même
+/// ordre).
 Future<
   ({
     List<EloGame> games,
     List<String?> places,
     List<DateTime> dates,
     List<int> ids,
+    List<int?> events,
   })
 >
 _fetchGames(SupabaseClient db, String prefix) async {
@@ -326,7 +340,7 @@ _fetchGames(SupabaseClient db, String prefix) async {
       .from('${prefix}partie')
       .select(
         'id, jeu_id, joueur1_id, joueur2_id, score_joueur1, score_joueur2, '
-        'created_at, place:lieu_id(nom)',
+        'created_at, evenement_id, place:lieu_id(nom)',
       )
       .order('created_at', ascending: true)
       .order('id', ascending: true);
@@ -344,6 +358,7 @@ _fetchGames(SupabaseClient db, String prefix) async {
     places: [for (final r in rows) r['place']?['nom'] as String?],
     dates: [for (final r in rows) DateTime.parse(r['created_at'] as String)],
     ids: [for (final r in rows) r['id'] as int],
+    events: [for (final r in rows) r['evenement_id'] as int?],
   );
 }
 
@@ -367,7 +382,7 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
     final (
       players,
       boardGames,
-      (:games, :places, :dates, :ids),
+      (:games, :places, :dates, :ids, events: _),
       photoRows,
     ) = await (
       db.from('${prefix}joueur').select('id, nom'),
@@ -432,7 +447,11 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
   }
 
   if (table == 'joueur') {
-    final (players, boardGames, (:games, :places, :dates, :ids)) = await (
+    final (
+      players,
+      boardGames,
+      (:games, :places, :dates, :ids, events: _),
+    ) = await (
       db
           .from('${prefix}joueur')
           .select('id, nom')
@@ -515,7 +534,11 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
   }
 
   if (table == 'jeu') {
-    final (boardGames, players, (:games, :places, :dates, :ids)) = await (
+    final (
+      boardGames,
+      players,
+      (:games, :places, :dates, :ids, events: _),
+    ) = await (
       db.from('${prefix}jeu').select('id, nom').order('nom', ascending: true),
       db
           .from('${prefix}joueur')
@@ -601,6 +624,8 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
     );
   }
 
+  if (table == 'evenement' && prefix.isEmpty) return _fetchWargameEvents(db);
+
   if (table == 'evenement') {
     final rows = await db
         .from('${prefix}evenement')
@@ -630,6 +655,98 @@ Future<RowTable> fetchRows(String table, {String prefix = ''}) async {
   return RowTable(
     banners: [
       for (final r in rows) bannerAsset('$prefix$table', r['id'] as int),
+    ],
+    columns: const ['Nom'],
+    rows: [
+      for (final r in rows) [r['nom'] as String],
+    ],
+  );
+}
+
+/// Gloire gagnée (ou perdue) par chaque joueur à l'événement [event] : la
+/// somme de ses variations de ELO pendant les parties de cet événement.
+/// [games] est dans l'ordre chronologique ; [events] donne l'événement de
+/// chaque partie (même ordre).
+Map<int, int> eventGlory(List<EloGame> games, List<int?> events, int event) {
+  final deltas = eloDeltas(games);
+  final glory = <int, double>{};
+  for (final (i, g) in games.indexed) {
+    if (events[i] != event) continue;
+    glory[g.player1] = (glory[g.player1] ?? 0) + deltas[i];
+    glory[g.player2] = (glory[g.player2] ?? 0) - deltas[i];
+  }
+  return {
+    for (final MapEntry(:key, :value) in glory.entries) key: value.round(),
+  };
+}
+
+/// Événements Wargame : le nom (et la date, dans la liste seulement), le
+/// type, puis, comme au RPG, ceux qui ont joué à ses parties avec la Gloire
+/// gagnée (ou perdue) à l'événement : la somme de leurs variations de ELO
+/// pendant ses parties ; enfin ses parties, de la plus récente à la plus
+/// ancienne.
+Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
+  final (
+    rows,
+    players,
+    boardGames,
+    (:games, :places, :dates, :ids, :events),
+  ) = await (
+    db
+        .from('evenement')
+        .select('id, nom, date, type')
+        .order('nom', ascending: true),
+    db.from('joueur').select('id, nom'),
+    db.from('jeu').select('id, nom'),
+    _fetchGames(db, ''),
+  ).wait;
+  final playerNames = {
+    for (final p in players) p['id'] as int: p['nom'] as String,
+  };
+  final gameNames = {
+    for (final j in boardGames) j['id'] as int: j['nom'] as String,
+  };
+  final eventIds = [for (final r in rows) r['id'] as int];
+
+  EventDetail detail(int event) => (
+    players: [
+      for (final MapEntry(key: id, value: points) in eventGlory(
+        games,
+        events,
+        event,
+      ).entries)
+        (id: id, name: playerNames[id]!, glory: points),
+    ],
+  );
+
+  return RowTable(
+    banners: [for (final id in eventIds) bannerAsset('evenement', id)],
+    // La date seulement dans la liste, pas dans le détail.
+    dates: [
+      for (final r in rows)
+        if (r['date'] case final String d) DateTime.parse(d) else null,
+    ],
+    eventIds: eventIds,
+    eventTypes: [for (final r in rows) EventType.fromKey(r['type'] as String?)],
+    eventDetails: [for (final id in eventIds) detail(id)],
+    // Un clic sur une partie y mène.
+    matchListIds: [
+      for (final event in eventIds)
+        [
+          for (final (i, _) in games.indexed.toList().reversed)
+            if (events[i] == event) ids[i],
+        ],
+    ],
+    matchLists: [
+      for (final event in eventIds)
+        _matchDetails(
+          games: games,
+          places: places,
+          dates: dates,
+          playerNames: playerNames,
+          gameNames: gameNames,
+          whereIndex: (i) => events[i] == event,
+        ),
     ],
     columns: const ['Nom'],
     rows: [
@@ -824,6 +941,37 @@ String formatFullDate(DateTime date) {
   String two(int n) => n.toString().padLeft(2, '0');
   return '${two(d.day)}/${two(d.month)}/${d.year}';
 }
+
+/// Type d'un événement Wargame : son format (tournoi ou campagne).
+enum EventType {
+  elimination('Élimination'),
+  championnat('Championnat'),
+  suisse('Suisse'),
+  campagne('Campagne');
+
+  const EventType(this.label);
+
+  /// Nom affiché.
+  final String label;
+
+  /// Valeur en base : le nom de l'enum.
+  String get key => name;
+
+  /// Depuis la valeur en base (null ou inconnue : pas de type).
+  static EventType? fromKey(String? key) => [
+    for (final t in values)
+      if (t.key == key) t,
+  ].firstOrNull;
+}
+
+/// Enregistre le type de l'événement Wargame [eventId]. Backoffice :
+/// réservé aux connectés.
+Future<void> saveEventType(int eventId, EventType type) => Supabase
+    .instance
+    .client
+    .from('evenement')
+    .update({'type': type.key})
+    .eq('id', eventId);
 
 /// Enregistre le résumé d'une partie (null ou vide : l'efface). Backoffice :
 /// réservé aux connectés. [prefix] : voir [fetchRows].

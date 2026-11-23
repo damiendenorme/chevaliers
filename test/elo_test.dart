@@ -8,6 +8,25 @@ EloGame g(int game, int p1, int p2, int s1, int s2) =>
     (game: game, player1: p1, player2: p2, score1: s1, score2: s2);
 
 void main() {
+  test('eventGlory: the ELO changes of the event parties only', () {
+    const games = [
+      (game: 1, player1: 1, player2: 2, score1: 10, score2: 0),
+      (game: 1, player1: 1, player2: 3, score1: 10, score2: 0),
+      (game: 1, player1: 3, player2: 2, score1: 10, score2: 0),
+    ];
+    final deltas = eloDeltas(games);
+    final glory = eventGlory(games, [7, null, 7], 7);
+    // Arthur (1) gagne la 1re ; la 2e est hors de l'événement.
+    expect(glory, {
+      1: deltas[0].round(),
+      2: (-deltas[0] - deltas[2]).round(),
+      3: deltas[2].round(),
+    });
+    expect(glory[1], greaterThan(0));
+    expect(glory[2], lessThan(0));
+    expect(eventGlory(games, [7, null, 7], 9), isEmpty);
+  });
+
   group('computeElo', () {
     test('everyone starts at 1000', () {
       final elo = computeElo([]);
