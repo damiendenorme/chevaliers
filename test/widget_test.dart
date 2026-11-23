@@ -1342,6 +1342,219 @@ void main() {
     );
   });
 
+  testWidgets(
+    'Signed in, an empty Wargame event shows « Aucun joueur. », « Aucune partie. »',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final auth = FakeAuth();
+      final games = <(int, int)>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MyHomePage(
+            writeEventGame: (event, game) async => games.add((event, game)),
+            loadRows: (_) async => const RowTable(
+              columns: ['Nom'],
+              rows: [
+                ['Camlann'],
+              ],
+              eventIds: [7],
+              eventTypes: [null],
+              eventDetails: [(players: [])],
+              rowIds: [7],
+              eventGames: [null],
+              gameOptions: [(5, 'Échecs')],
+            ),
+            loadCounts: () async =>
+                (players: 0, events: 1, games: 0, boardGames: 0),
+            auth: auth,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(inList('Camlann'));
+      await tester.pump();
+      // Déconnecté : rien.
+      expect(inList('Aucun joueur.'), findsNothing);
+      expect(inList('Aucune partie.'), findsNothing);
+
+      await auth.signIn('arthur@table.fr', 'excalibur');
+      await tester.pump();
+      // Sans jeu : « Aucun jeu », et pas d'ajout de partie.
+      expect(inList('Aucun jeu'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is AddButton && w.label == 'Ajouter une partie',
+        ),
+        findsNothing,
+      );
+      expect(inList('Aucun joueur.'), findsOneWidget);
+      expect(inList('Aucune partie.'), findsOneWidget);
+      expect(
+        tester.getRect(inList('Aucun joueur.')).bottom,
+        lessThan(tester.getRect(inList('Aucune partie.')).top),
+      );
+
+      // Choisir le jeu de l'événement.
+      await tester.tap(
+        find.byWidgetPredicate(
+          (w) => w is AddButton && w.label == 'Choisir le jeu',
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Échecs').last);
+      await tester.pumpAndSettle();
+      expect(games, [(7, 5)]);
+      // Rechargé : on reste sur le détail de l'événement.
+      expect(inList('Sélectionnez un élément à gauche.'), findsNothing);
+      expect(inList('Aucun jeu'), findsOneWidget);
+    },
+  );
+
+  testWidgets('Signed in, players then parties are added to a Wargame event', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // Arthur a joué à l'événement ; Bors y est seulement inscrit.
+    final registered = <(int, String)>[(2, 'Bors')];
+    final calls = <String>[];
+    final parties = <NewParty>[];
+    final loaded = <String>[];
+    final auth = FakeAuth();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (table) async {
+            loaded.add(table);
+            return RowTable(
+              columns: const ['Nom'],
+              rows: const [
+                ['Camlann'],
+              ],
+              rowIds: const [7],
+              eventIds: const [7],
+              eventTypes: const [null],
+              eventPlayed: const [
+                {1},
+              ],
+              eventGames: const [(5, 'Échecs')],
+              gameOptions: const [(5, 'Échecs'), (6, 'Go')],
+              eventDetails: [
+                (
+                  players: [
+                    (id: 1, name: 'Arthur', glory: 12),
+                    for (final (id, name) in registered)
+                      (id: id, name: name, glory: 0),
+                  ],
+                ),
+              ],
+            );
+          },
+          loadCounts: () async =>
+              (players: 3, events: 1, games: 0, boardGames: 1),
+          auth: auth,
+          loadPartyOptions: () async => (
+            players: [(1, 'Arthur'), (2, 'Bors'), (3, 'Gauvain')],
+            games: [(5, 'Échecs')],
+            places: [(8, 'Aumes')],
+          ),
+          saveParty: (party) async => parties.add(party),
+          eventPlayers: (
+            players: () async => [(1, 'Arthur'), (2, 'Bors'), (3, 'Gauvain')],
+            add: (event, player) async {
+              calls.add('add $event $player');
+              registered.add((player, 'Gauvain'));
+            },
+            remove: (event, player) async {
+              calls.add('remove $event $player');
+              registered.removeWhere((p) => p.$1 == player);
+            },
+          ),
+        ),
+      ),
+    );
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+    await tester.tap(inList('Camlann'));
+    await tester.pump();
+
+    // Une croix pour Bors seulement : Arthur a déjà joué.
+    final remove = find.byTooltip("Retirer de l'événement");
+    expect(remove, findsOneWidget);
+
+    // Inscrire Gauvain : seuls les non-inscrits sont proposés.
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w is AddButton && w.label == 'Ajouter un joueur',
+      ),
+    );
+    await tester.pumpAndSettle();
+    final picker = find.byType(Dialog);
+    expect(
+      find.descendant(of: picker, matching: find.text('Bors')),
+      findsNothing,
+    );
+    await tester.tap(
+      find.descendant(of: picker, matching: find.text('Gauvain')),
+    );
+    await tester.pumpAndSettle();
+    expect(calls, ['add 7 3']);
+    // Rechargé, l'événement reste choisi.
+    expect(loaded.last, 'evenement');
+    expect(inList('Gauvain'), findsOneWidget);
+
+    // Retirer Bors.
+    await tester.tap(remove.first);
+    await tester.pumpAndSettle();
+    expect(calls, ['add 7 3', 'remove 7 2']);
+    expect(inList('Bors'), findsNothing);
+
+    // Une partie de l'événement : entre ses joueurs seulement.
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w is AddButton && w.label == 'Ajouter une partie',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Nouvelle partie'), findsOneWidget);
+    Future<void> choose(String label, String item) async {
+      await tester.tap(
+        find.widgetWithText(DropdownButtonFormField<int>, label),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(item).last);
+      await tester.pumpAndSettle();
+    }
+
+    await tester.tap(
+      find.widgetWithText(DropdownButtonFormField<int>, 'Joueur 1'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Bors'), findsNothing);
+    await tester.tap(find.text('Arthur').last);
+    await tester.pumpAndSettle();
+    await choose('Joueur 2', 'Gauvain');
+    // Pas de champ Jeu : celui de l'événement.
+    expect(
+      find.widgetWithText(DropdownButtonFormField<int>, 'Jeu'),
+      findsNothing,
+    );
+    final scores = find.widgetWithText(TextField, 'Score');
+    await tester.enterText(scores.at(0), '3');
+    await tester.enterText(scores.at(1), '1');
+    await tester.tap(find.text('Ajouter'));
+    await tester.pumpAndSettle();
+
+    expect(parties, hasLength(1));
+    final p = parties.single;
+    expect((p.player1, p.player2, p.game, p.event), (1, 3, 5, 7));
+  });
+
   testWidgets('Signed in, a + button adds an RPG party (GM, guests)', (
     tester,
   ) async {
@@ -1750,7 +1963,7 @@ void main() {
     expect(chooser, findsNothing);
     await tester.tap(inList('Camlann'));
     await tester.pump();
-    expect(inList('Type'), findsNothing);
+    expect(inList('Aucun type'), findsNothing);
 
     // Connecté : « Aucun type » et le bouton, qui propose les quatre types.
     await auth.signIn('arthur@table.fr', 'excalibur');

@@ -8,7 +8,20 @@ import 'top_bar.dart';
 /// et le jeu (choisis dans [options]), les deux scores, le lieu (choisi aussi)
 /// et la date (facultatifs). Appelle [onSubmit], puis se ferme ; affiche l'erreur sinon.
 class PartyDialog extends StatefulWidget {
-  const PartyDialog({super.key, required this.options, required this.onSubmit});
+  const PartyDialog({
+    super.key,
+    required this.options,
+    required this.onSubmit,
+    this.event,
+    this.game,
+  });
+
+  /// Jeu de la partie (pas de champ Jeu) : celui de l'événement.
+  final int? game;
+
+  /// Événement de la partie (pas de choix dans la fenêtre) : ajoutée depuis
+  /// le détail de l'événement, entre ses joueurs.
+  final int? event;
 
   /// Joueurs et jeux proposés, chargés à l'ouverture.
   final Future<PartyOptions> options;
@@ -21,7 +34,7 @@ class PartyDialog extends StatefulWidget {
 class _PartyDialogState extends State<PartyDialog> {
   int? _player1;
   int? _player2;
-  int? _game;
+  late int? _game = widget.game;
   final _score1 = TextEditingController(text: '0');
   final _score2 = TextEditingController(text: '0');
   int? _place;
@@ -74,6 +87,7 @@ class _PartyDialogState extends State<PartyDialog> {
         score2: score2!,
         game: _game!,
         place: _place,
+        event: widget.event,
         date: _date,
       ));
       if (mounted) Navigator.of(context).pop();
@@ -180,12 +194,13 @@ class _PartyDialogState extends State<PartyDialog> {
                         SizedBox(width: 72, child: _score(_score2, 'Score')),
                       ],
                     ),
-                    _picker(
-                      label: 'Jeu',
-                      items: options.games,
-                      value: _game,
-                      onChanged: (id) => setState(() => _game = id),
-                    ),
+                    if (widget.game == null)
+                      _picker(
+                        label: 'Jeu',
+                        items: options.games,
+                        value: _game,
+                        onChanged: (id) => setState(() => _game = id),
+                      ),
                     // Lieu facultatif, parmi ceux de la table des lieux.
                     _picker(
                       label: 'Lieu (facultatif)',

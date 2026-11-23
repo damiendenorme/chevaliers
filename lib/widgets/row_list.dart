@@ -14,6 +14,17 @@ import 'top_bar.dart';
 /// de lignes, et ce sont la liste et le détail qui défilent à l'intérieur.
 /// Gère aussi le chargement, l'erreur et le cas vide, dans la carte de la
 /// liste.
+/// Backoffice d'un événement Wargame : la liste de tous les joueurs,
+/// l'inscription et le retrait d'un joueur, et l'ajout d'une partie entre
+/// ses joueurs (id de l'événement, joueurs proposés).
+typedef EventEditor = ({
+  Future<List<(int, String)>> Function() players,
+  Future<void> Function(int eventId, int playerId) add,
+  Future<void> Function(int eventId, int playerId) remove,
+  void Function(int eventId, int gameId, List<(int, String)> players) addParty,
+  Future<void> Function(int eventId, int gameId) setGame,
+});
+
 class RowList extends StatelessWidget {
   const RowList({
     super.key,
@@ -25,7 +36,12 @@ class RowList extends StatelessWidget {
     this.onNavigate,
     this.selectId,
     this.onSetEventType,
+    this.eventEditor,
   });
+
+  /// Si non nul : les joueurs et les parties d'un événement s'ajoutent
+  /// (backoffice).
+  final EventEditor? eventEditor;
 
   /// Si non nul : le type d'un événement se choisit (backoffice), avec l'id
   /// de l'événement et le type choisi.
@@ -113,6 +129,7 @@ class RowList extends StatelessWidget {
           onNavigate: onNavigate,
           selectId: selectId,
           onSetEventType: onSetEventType,
+          eventEditor: eventEditor,
         );
       },
     );
@@ -221,9 +238,13 @@ class _MasterDetail extends StatefulWidget {
     this.onNavigate,
     this.selectId,
     this.onSetEventType,
+    this.eventEditor,
   });
 
   final RowTable table;
+
+  /// Connecté : joueurs et parties des événements Wargame.
+  final EventEditor? eventEditor;
 
   /// Connecté : choix du type des événements.
   final Future<void> Function(int eventId, EventType type)? onSetEventType;
@@ -615,6 +636,16 @@ class _MasterDetailState extends State<_MasterDetail> {
                             null => null,
                           },
                         ),
+                      // Puis son jeu, choisi de la même façon.
+                      if (table.eventId(_selected!) case final id?)
+                        _EventGameLine(
+                          table.eventGame(_selected!)?.$2,
+                          games: table.gameOptions,
+                          onChoose: switch (widget.eventEditor) {
+                            final editor? => (game) => editor.setGame(id, game),
+                            null => null,
+                          },
+                        ),
                       // Un événement : ceux qui y ont joué, triables.
                       if (table.eventDetail(_selected!) case final e?)
                         Padding(
@@ -623,6 +654,46 @@ class _MasterDetailState extends State<_MasterDetail> {
                           child: _EventPlayers(
                             key: ValueKey(('joueurs', _selected)),
                             e.players,
+                            // Connecté seulement : « Aucun joueur. ».
+                            showEmpty:
+                                widget.eventEditor != null &&
+                                table.eventId(_selected!) != null,
+                            // Connecté (Wargame) : inscrire ou retirer des
+                            // joueurs ; pas ceux qui ont déjà joué.
+                            locked: table.eventPlayedBy(_selected!),
+                            onRemove: switch ((
+                              widget.eventEditor,
+                              table.eventId(_selected!),
+                            )) {
+                              (final editor?, final id?) => (
+                                player,
+                              ) => editor.remove(id, player),
+                              _ => null,
+                            },
+                            onAdd: switch ((
+                              widget.eventEditor,
+                              table.eventId(_selected!),
+                            )) {
+                              (final editor?, final id?) => () async {
+                                final chosen = await showDialog<(int, String)>(
+                                  context: context,
+                                  builder: (_) => AccentScope(
+                                    style: AccentStyle.of(context),
+                                    child: _PlayerPicker(
+                                      title: 'Ajouter un joueur',
+                                      players: editor.players(),
+                                      exclude: {
+                                        for (final p in e.players) p.id,
+                                      },
+                                    ),
+                                  ),
+                                );
+                                if (chosen != null) {
+                                  await editor.add(id, chosen.$1);
+                                }
+                              },
+                              _ => null,
+                            },
                             // Un clic sur un joueur y mène.
                             onTap: switch (widget.onNavigate) {
                               final go? => (id) => go('joueur', id),
@@ -680,6 +751,49 @@ class _MasterDetailState extends State<_MasterDetail> {
                           _ => null,
                         },
                       ),
+                      // Événement Wargame sans partie, connecté : « Aucune
+                      // partie. ».
+                      if (widget.eventEditor != null &&
+                          table.eventId(_selected!) != null &&
+                          table.matchList(_selected!).isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Aucune partie.',
+                            textAlign: TextAlign.center,
+                            style: _text.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      // Connecté (Wargame) : ajouter une partie à
+                      // l'événement, entre ses joueurs.
+                      // Seulement une fois le jeu de l'événement choisi.
+                      if ((
+                            widget.eventEditor,
+                            table.eventId(_selected!),
+                            table.eventDetail(_selected!),
+                            table.eventGame(_selected!),
+                          )
+                          case (
+                            final editor?,
+                            final id?,
+                            final e?,
+                            (final game, _),
+                          ))
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Center(
+                            child: AddButton(
+                              label: 'Ajouter une partie',
+                              onPressed: () => editor.addParty(id, game, [
+                                for (final p in e.players) (p.id, p.name),
+                              ]),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -1031,9 +1145,28 @@ class _SortHeader extends StatelessWidget {
 /// quand la liste est triée par Gloire), à droite sa Gloire gagnée à
 /// l'événement. Triable par nom ou par Gloire.
 class _EventPlayers extends StatefulWidget {
-  const _EventPlayers(this.players, {super.key, this.onTap});
+  const _EventPlayers(
+    this.players, {
+    super.key,
+    this.onTap,
+    this.onRemove,
+    this.onAdd,
+    this.locked = const {},
+    this.showEmpty = false,
+  });
+
+  /// Sans joueur : « Aucun joueur. » (événements Wargame, connecté) ;
+  /// sinon rien.
+  final bool showEmpty;
 
   final List<({int id, String name, int glory})> players;
+
+  /// Si non nul : une croix retire chaque joueur, sauf ceux de [locked].
+  final Future<void> Function(int playerId)? onRemove;
+  final Set<int> locked;
+
+  /// Si non nul : un bouton sous la liste ajoute un joueur.
+  final VoidCallback? onAdd;
 
   /// Si non nul : chaque joueur est cliquable (son id).
   final ValueChanged<int>? onTap;
@@ -1055,7 +1188,34 @@ class _EventPlayersState extends State<_EventPlayers> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.players.isEmpty) return const SizedBox.shrink();
+    final add = widget.onAdd;
+    if (widget.players.isEmpty) {
+      if (add == null && !widget.showEmpty) return const SizedBox.shrink();
+      // « Aucun joueur. », et dessous le bouton d'ajout (connecté).
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          spacing: 12,
+          children: [
+            if (widget.showEmpty)
+              Text(
+                'Aucun joueur.',
+                style: _text.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            if (add != null)
+              AddButton(
+                icon: Icons.person_add,
+                label: 'Ajouter un joueur',
+                onPressed: add,
+              ),
+          ],
+        ),
+      );
+    }
+    final remove = widget.onRemove;
+    final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
     const divider = BorderSide(color: dividerColor);
     final direction = _ascending ? 1 : -1;
     final players = [...widget.players]
@@ -1132,7 +1292,38 @@ class _EventPlayersState extends State<_EventPlayers> {
                     textAlign: TextAlign.right,
                   ),
                 ),
+                // Connecté : retirer ce joueur (pas s'il a déjà joué).
+                if (remove != null)
+                  SizedBox.square(
+                    dimension: 24,
+                    child: widget.locked.contains(p.id)
+                        ? null
+                        : IconButton(
+                            tooltip: "Retirer de l'événement",
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 24,
+                              height: 24,
+                            ),
+                            iconSize: 16,
+                            color: labelColor,
+                            onPressed: () => remove(p.id),
+                            icon: const Icon(Icons.close),
+                          ),
+                  ),
               ],
+            ),
+          ),
+        if (add != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Center(
+              child: AddButton(
+                icon: Icons.person_add,
+                label: 'Ajouter un joueur',
+                onPressed: add,
+              ),
             ),
           ),
       ],
@@ -2302,9 +2493,9 @@ class _Detail extends StatelessWidget {
   }
 }
 
-/// Type d'un événement, sous son nom, comme ses autres informations :
-/// « Type », puis sa valeur. Avec [onChoose] (connecté), un bouton à
-/// droite ouvre la liste des types pour le choisir ; sans type et sans
+/// Type d'un événement, sous son nom, centré : sa valeur, sans libellé.
+/// Avec [onChoose] (connecté), un bouton rond dessous ouvre la liste des
+/// types pour le choisir ; sans type et sans
 /// [onChoose], rien.
 class _EventTypeLine extends StatelessWidget {
   const _EventTypeLine(this.type, {this.onChoose});
@@ -2317,26 +2508,16 @@ class _EventTypeLine extends StatelessWidget {
     final choose = onChoose;
     if (type == null && choose == null) return const SizedBox.shrink();
     final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    // Centrés : sa valeur, et dessous le bouton (connecté).
     return Padding(
       padding: _cellPadding,
-      child: Row(
+      child: Column(
+        spacing: 6,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Type',
-                  style: _text.copyWith(fontSize: 12, color: labelColor),
-                ),
-                Text(
-                  type?.label ?? 'Aucun type',
-                  style: type == null
-                      ? _text.copyWith(color: labelColor)
-                      : _text,
-                ),
-              ],
-            ),
+          Text(
+            type?.label ?? 'Aucun type',
+            textAlign: TextAlign.center,
+            style: type == null ? _text.copyWith(color: labelColor) : _text,
           ),
           if (choose != null)
             PopupMenuButton<EventType>(
@@ -2354,6 +2535,55 @@ class _EventTypeLine extends StatelessWidget {
                   onPressed: () {},
                   icon: Icons.edit,
                   label: 'Choisir le type',
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Jeu d'un événement, sous son type, centré : son nom. Avec [onChoose]
+/// (connecté), un bouton rond dessous ouvre la liste des [games] pour le
+/// choisir ; sans jeu et sans [onChoose], rien.
+class _EventGameLine extends StatelessWidget {
+  const _EventGameLine(this.game, {required this.games, this.onChoose});
+
+  final String? game;
+  final List<(int, String)> games;
+  final Future<void> Function(int gameId)? onChoose;
+
+  @override
+  Widget build(BuildContext context) {
+    final choose = onChoose;
+    if (game == null && choose == null) return const SizedBox.shrink();
+    final labelColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: _cellPadding,
+      child: Column(
+        spacing: 6,
+        children: [
+          Text(
+            game ?? 'Aucun jeu',
+            textAlign: TextAlign.center,
+            style: game == null ? _text.copyWith(color: labelColor) : _text,
+          ),
+          if (choose != null)
+            PopupMenuButton<int>(
+              tooltip: 'Choisir le jeu',
+              onSelected: choose,
+              itemBuilder: (context) => [
+                for (final (id, name) in games)
+                  PopupMenuItem(value: id, child: Text(name)),
+              ],
+              // Le bouton rond des autres modifications ; le menu reçoit le
+              // clic.
+              child: IgnorePointer(
+                child: AddButton(
+                  onPressed: () {},
+                  icon: Icons.edit,
+                  label: 'Choisir le jeu',
                 ),
               ),
             ),

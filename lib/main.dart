@@ -113,6 +113,12 @@ class MyHomePage extends StatefulWidget {
     this.loadRpgPartyOptions = fetchRpgPartyOptions,
     this.writeSummary = saveSummary,
     this.writeEventType = saveEventType,
+    this.writeEventGame = saveEventGame,
+    this.eventPlayers = (
+      players: fetchPlayers,
+      add: addEventPlayer,
+      remove: removeEventPlayer,
+    ),
     this.writeRpgSummary = saveRpgSummary,
     this.uploadPhoto = pickAndUploadPhoto,
     this.uploadRpgPhoto = pickAndUploadRpgPhoto,
@@ -125,6 +131,12 @@ class MyHomePage extends StatefulWidget {
 
   /// Modification des joueurs d'une partie de JDR (backoffice).
   final GuestEditor rpgGuests;
+
+  /// Joueurs d'un événement Wargame (backoffice).
+  final EventPlayersEditor eventPlayers;
+
+  /// Choix du jeu d'un événement Wargame (backoffice).
+  final Future<void> Function(int eventId, int gameId) writeEventGame;
 
   /// Choix du type d'un événement Wargame (backoffice).
   final Future<void> Function(int eventId, EventType type) writeEventType;
@@ -235,6 +247,8 @@ class _MyHomePageState extends State<MyHomePage> {
                       saveSummary: widget.writeSummary,
                       addPhoto: widget.uploadPhoto,
                       saveEventType: widget.writeEventType,
+                      eventPlayers: widget.eventPlayers,
+                      saveEventGame: widget.writeEventGame,
                     ),
                   ),
                   // RPG : accentuation bronze.
@@ -371,7 +385,15 @@ class GamePage extends StatefulWidget {
     this.addRpgParty,
     this.loadRpgPartyOptions,
     this.saveEventType,
+    this.eventPlayers,
+    this.saveEventGame,
   });
+
+  /// Choix du jeu d'un événement ; null : pas sur cette page (RPG).
+  final Future<void> Function(int eventId, int gameId)? saveEventGame;
+
+  /// Joueurs d'un événement ; null : pas sur cette page (RPG).
+  final EventPlayersEditor? eventPlayers;
 
   /// Choix du type d'un événement ; null : pas sur cette page (RPG).
   final Future<void> Function(int eventId, EventType type)? saveEventType;
@@ -476,6 +498,65 @@ class _GamePageState extends State<GamePage> {
       ),
     ),
   );
+
+  /// Backoffice des événements (Wargame) : chaque modification recharge la
+  /// liste en gardant l'événement choisi.
+  EventEditor? get _eventEditor => switch ((
+    widget.eventPlayers,
+    widget.addParty,
+    widget.loadPartyOptions,
+    widget.saveEventGame,
+  )) {
+    (final players?, final addParty?, final options?, final saveGame?) => (
+      players: players.players,
+      add: (event, player) async {
+        await players.add(event, player);
+        _reloadEvent(event);
+      },
+      remove: (event, player) async {
+        await players.remove(event, player);
+        _reloadEvent(event);
+      },
+      // Une partie de l'événement : seulement entre ses joueurs.
+      setGame: (event, game) async {
+        await saveGame(event, game);
+        _reloadEvent(event);
+      },
+      addParty: (event, game, eventPlayers) => showDialog<void>(
+        context: context,
+        builder: (_) => AccentScope(
+          style: AccentStyle.of(context),
+          child: PartyDialog(
+            event: event,
+            game: game,
+            options: options().then(
+              (o) => (
+                players: eventPlayers.toList()
+                  ..sort((a, b) => compareNames(a.$2, b.$2)),
+                games: o.games,
+                places: o.places,
+              ),
+            ),
+            onSubmit: (party) async {
+              await addParty(party);
+              _reloadEvent(event);
+            },
+          ),
+        ),
+      ),
+    ),
+    _ => null,
+  };
+
+  /// Recharge les événements et les nombres, en gardant [event] choisi.
+  void _reloadEvent(int event) {
+    if (!mounted) return;
+    setState(() {
+      _rows = widget.loadRows('evenement');
+      _selectId = event;
+      _counts = widget.loadCounts();
+    });
+  }
 
   /// Demande la partie de JDR, l'enregistre, puis recharge.
   Future<void> _addRpgParty() => showDialog<void>(
@@ -615,6 +696,8 @@ class _GamePageState extends State<GamePage> {
                               onSetEventType: signedIn
                                   ? widget.saveEventType
                                   : null,
+                              // Connecté : joueurs et parties des événements.
+                              eventEditor: signedIn ? _eventEditor : null,
                             );
                           },
                         ),

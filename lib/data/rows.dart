@@ -25,6 +25,9 @@ class RowTable {
     this.eventDetails,
     this.eventIds,
     this.eventTypes,
+    this.eventPlayed,
+    this.eventGames,
+    this.gameOptions = const [],
     this.sessionDetails,
     this.sessionLines,
     this.partyIds,
@@ -119,6 +122,19 @@ class RowTable {
   final List<EventType?>? eventTypes;
 
   int? eventId(int index) => eventIds?[index];
+
+  /// Pour les événements Wargame : les joueurs qui ont déjà joué à une de
+  /// ses parties (ils ne peuvent plus en être retirés).
+  final List<Set<int>>? eventPlayed;
+
+  Set<int> eventPlayedBy(int index) => eventPlayed?[index] ?? const {};
+
+  /// Pour les événements Wargame : le jeu de chaque événement (id, nom ;
+  /// null : pas encore choisi), et les jeux proposés pour le choisir.
+  final List<(int, String)?>? eventGames;
+  final List<(int, String)> gameOptions;
+
+  (int, String)? eventGame(int index) => eventGames?[index];
   EventType? eventType(int index) => eventTypes?[index];
 
   /// Pour les parties de JDR : chaque ligne est une partie, affichée dans le
@@ -690,14 +706,16 @@ Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
     rows,
     players,
     boardGames,
+    registrations,
     (:games, :places, :dates, :ids, :events),
   ) = await (
     db
         .from('evenement')
-        .select('id, nom, date, type')
+        .select('id, nom, date, type, jeu_id')
         .order('nom', ascending: true),
     db.from('joueur').select('id, nom'),
     db.from('jeu').select('id, nom'),
+    db.from('evenement_joueur').select('evenement_id, joueur_id'),
     _fetchGames(db, ''),
   ).wait;
   final playerNames = {
@@ -708,16 +726,21 @@ Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
   };
   final eventIds = [for (final r in rows) r['id'] as int];
 
-  EventDetail detail(int event) => (
-    players: [
-      for (final MapEntry(key: id, value: points) in eventGlory(
-        games,
-        events,
-        event,
-      ).entries)
-        (id: id, name: playerNames[id]!, glory: points),
-    ],
-  );
+  // Ses joueurs : les inscrits, et ceux qui ont joué à ses parties ; 0 de
+  // Gloire tant qu'ils n'ont pas joué.
+  EventDetail detail(int event) {
+    final glory = eventGlory(games, events, event);
+    final registered = {
+      for (final r in registrations)
+        if (r['evenement_id'] == event) r['joueur_id'] as int,
+    };
+    return (
+      players: [
+        for (final id in {...registered, ...glory.keys})
+          (id: id, name: playerNames[id]!, glory: glory[id] ?? 0),
+      ],
+    );
+  }
 
   return RowTable(
     banners: [for (final id in eventIds) bannerAsset('evenement', id)],
@@ -726,9 +749,27 @@ Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
       for (final r in rows)
         if (r['date'] case final String d) DateTime.parse(d) else null,
     ],
+    // Après une modification, la liste rechargée garde l'événement choisi.
+    rowIds: eventIds,
     eventIds: eventIds,
     eventTypes: [for (final r in rows) EventType.fromKey(r['type'] as String?)],
+    eventGames: [
+      for (final r in rows)
+        if (r['jeu_id'] case final int id) (id, gameNames[id]!) else null,
+    ],
+    gameOptions: [
+      for (final MapEntry(:key, :value) in gameNames.entries) (key, value),
+    ]..sort((a, b) => compareNames(a.$2, b.$2)),
     eventDetails: [for (final id in eventIds) detail(id)],
+    eventPlayed: [
+      for (final event in eventIds)
+        {
+          for (final (i, g) in games.indexed)
+            if (events[i] == event) ...[g.player1, g.player2],
+        },
+    ],
+    // Ses parties, sans colonne Jeu : celui de l'événement.
+    matchListShowsGame: false,
     // Un clic sur une partie y mène.
     matchListIds: [
       for (final event in eventIds)
@@ -915,6 +956,7 @@ typedef NewParty = ({
   int score2,
   int game,
   int? place,
+  int? event,
   DateTime? date,
 });
 
@@ -928,6 +970,7 @@ Future<void> addParty(NewParty party, {String prefix = ''}) =>
       'score_joueur2': party.score2,
       'jeu_id': party.game,
       'lieu_id': ?party.place,
+      'evenement_id': ?party.event,
       // À midi le jour choisi : l'ordre chronologique reste celui des jours.
       'created_at': ?party.date
           ?.copyWith(hour: 12, minute: 0, second: 0)
@@ -972,6 +1015,43 @@ Future<void> saveEventType(int eventId, EventType type) => Supabase
     .from('evenement')
     .update({'type': type.key})
     .eq('id', eventId);
+
+/// Enregistre le jeu de l'événement Wargame [eventId] (backoffice).
+Future<void> saveEventGame(int eventId, int gameId) => Supabase.instance.client
+    .from('evenement')
+    .update({'jeu_id': gameId})
+    .eq('id', eventId);
+
+/// Joueurs d'un événement Wargame (backoffice) : la liste de tous les
+/// joueurs, l'inscription et le retrait d'un joueur.
+typedef EventPlayersEditor = ({
+  Future<List<(int, String)>> Function() players,
+  Future<void> Function(int eventId, int playerId) add,
+  Future<void> Function(int eventId, int playerId) remove,
+});
+
+/// Tous les joueurs Wargame (id, nom), par nom.
+Future<List<(int, String)>> fetchPlayers() async {
+  final rows = await Supabase.instance.client.from('joueur').select('id, nom');
+  return [for (final r in rows) (r['id'] as int, r['nom'] as String)]
+    ..sort((a, b) => compareNames(a.$2, b.$2));
+}
+
+/// Inscrit [playerId] à l'événement [eventId] (backoffice).
+Future<void> addEventPlayer(int eventId, int playerId) => Supabase
+    .instance
+    .client
+    .from('evenement_joueur')
+    .insert({'evenement_id': eventId, 'joueur_id': playerId});
+
+/// Retire [playerId] de l'événement [eventId] (backoffice).
+Future<void> removeEventPlayer(int eventId, int playerId) => Supabase
+    .instance
+    .client
+    .from('evenement_joueur')
+    .delete()
+    .eq('evenement_id', eventId)
+    .eq('joueur_id', playerId);
 
 /// Enregistre le résumé d'une partie (null ou vide : l'efface). Backoffice :
 /// réservé aux connectés. [prefix] : voir [fetchRows].
