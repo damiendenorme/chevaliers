@@ -578,6 +578,12 @@ class _MasterDetailState extends State<_MasterDetail> {
     };
   }
 
+  /// Un clic sur une partie y mène (son id).
+  ValueChanged<int>? _toParty() => switch (widget.onNavigate) {
+    final go? => (id) => go('partie', id),
+    null => null,
+  };
+
   /// Playoffs de l'événement [eventId] : leur tableau, dont les joueurs
   /// viennent du classement.
   Widget _playoffs(int eventId, List<List<BracketMatch>> bracket) => Column(
@@ -615,7 +621,11 @@ class _MasterDetailState extends State<_MasterDetail> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _heading('Calendrier'),
-                _Calendar(c.fixtures, onPlay: _fixturePlayer(eventId)),
+                _Calendar(
+                  c.fixtures,
+                  onPlay: _fixturePlayer(eventId),
+                  onOpen: _toParty(),
+                ),
               ],
             ),
           if (c.playoffBracket case final bracket?) _playoffs(eventId, bracket),
@@ -709,6 +719,7 @@ class _MasterDetailState extends State<_MasterDetail> {
                     fixtures,
                     showDays: false,
                     onPlay: _fixturePlayer(eventId, round: r),
+                    onOpen: _toParty(),
                   ),
                 ],
               ],
@@ -3998,9 +4009,18 @@ class _StandingsState extends State<_Standings> {
 /// grisé). Avec [onPlay] (connecté), un clic sur les scores d'une rencontre
 /// à jouer les fait saisir.
 class _Calendar extends StatelessWidget {
-  const _Calendar(this.fixtures, {this.onPlay, this.showDays = true});
+  const _Calendar(
+    this.fixtures, {
+    this.onPlay,
+    this.onOpen,
+    this.showDays = true,
+  });
 
   final List<Fixture> fixtures;
+
+  /// Si non nul : un clic sur une rencontre jouée mène à sa partie (son
+  /// id).
+  final ValueChanged<int>? onOpen;
 
   /// Les rencontres sous le titre de leur journée (pas pour un groupe de
   /// suisse : toutes ensemble).
@@ -4029,6 +4049,10 @@ class _Calendar extends StatelessWidget {
           ? '${f.score1} – ${f.score2}'
           : (play != null ? '+' : '–');
       return _detailRow(
+        onTap: switch ((onOpen, f.party)) {
+          (final open?, final party?) => () => open(party),
+          _ => null,
+        },
         child: Row(
           spacing: 10,
           children: [

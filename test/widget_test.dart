@@ -2346,6 +2346,7 @@ void main() {
 
     final settings = <(int?, int?)>[];
     final played = <(int, int?, PartyScore)>[];
+    final loaded = <String>[];
     final auth = FakeAuth();
     const players = [
       (1, 'Arthur'),
@@ -2376,27 +2377,29 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: MyHomePage(
-          loadRows: (_) async => RowTable(
-            columns: const ['Nom'],
-            rows: const [
-              ['Camlann'],
-            ],
-            rowIds: const [7],
-            eventIds: const [7],
-            eventTypes: const [EventType.suisse],
-            eventSwiss: [swiss],
-            eventGames: const [(5, 'Échecs')],
-            eventDetails: const [
-              (
-                players: [
-                  (id: 1, name: 'Arthur', glory: 0),
-                  (id: 2, name: 'Bors', glory: 0),
-                  (id: 3, name: 'Gauvain', glory: 0),
-                  (id: 4, name: 'Lancelot', glory: 0),
-                ],
-              ),
-            ],
-          ),
+          loadRows: (t) async => (loaded..add(t)).isEmpty
+              ? throw StateError('')
+              : RowTable(
+                  columns: const ['Nom'],
+                  rows: const [
+                    ['Camlann'],
+                  ],
+                  rowIds: const [7],
+                  eventIds: const [7],
+                  eventTypes: const [EventType.suisse],
+                  eventSwiss: [swiss],
+                  eventGames: const [(5, 'Échecs')],
+                  eventDetails: const [
+                    (
+                      players: [
+                        (id: 1, name: 'Arthur', glory: 0),
+                        (id: 2, name: 'Bors', glory: 0),
+                        (id: 3, name: 'Gauvain', glory: 0),
+                        (id: 4, name: 'Lancelot', glory: 0),
+                      ],
+                    ),
+                  ],
+                ),
           loadCounts: () async =>
               (players: 4, events: 1, games: 2, boardGames: 1),
           auth: auth,
@@ -2457,6 +2460,11 @@ void main() {
     await tester.tap(find.text('Groupes de 4 joueurs').last);
     await tester.pumpAndSettle();
     expect(settings, [(null, 4)]);
+
+    // Une rencontre jouée mène à sa partie.
+    await tester.tap(inList('3 – 0'));
+    await tester.pump();
+    expect(loaded.last, 'partie');
   });
 
   testWidgets('A Wargame event has a type, chosen when signed in', (
