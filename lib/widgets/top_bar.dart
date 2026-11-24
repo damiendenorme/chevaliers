@@ -114,17 +114,26 @@ const lightShadow = [
 ];
 
 /// Surface des cartes : l'image Carte assombrie, à coins arrondis, bourrelet
-/// bronze en relief et légère ombre ; son contenu (ligne active, survol) est
-/// découpé avec.
+/// bronze en relief et légère ombre ; son contenu (ligne active, survol),
+/// à [padding] des bords, est découpé avec.
 class CardSurface extends StatelessWidget {
   const CardSurface(
     this.child, {
     super.key,
     this.inset = true,
     this.fit = BoxFit.fill,
+    this.padding = const EdgeInsets.all(gutter),
   });
 
+  /// Écart entre les bords de la carte et son contenu.
+  static const double gutter = 5;
+
   final Widget child;
+
+  /// Écart entre les bords et le contenu : [gutter] tout autour par défaut.
+  /// Une carte dont le contenu défile le réduit, et reporte l'écart dans son
+  /// défilement : sa barre reste collée au bord.
+  final EdgeInsets padding;
 
   /// Cadrage de l'image : étirée par défaut, pour que son cadre suive les
   /// bords ; [BoxFit.cover] pour la garder dans ses proportions.
@@ -160,7 +169,7 @@ class CardSurface extends StatelessWidget {
                 ),
               ),
             ),
-            child: child,
+            child: Padding(padding: padding, child: child),
           ),
         ),
       ),

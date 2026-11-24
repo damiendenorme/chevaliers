@@ -214,7 +214,10 @@ void main() {
     final playersTable = tester.getRect(find.byType(RowList));
     expect(playersTable.width, RowList.width);
     expect(playersTable.center.dx, moreOrLessEquals(1400 / 2));
-    expect(tester.getRect(find.text('Arthur')).left, playersTable.left + 12);
+    expect(
+      tester.getRect(find.text('Arthur')).left,
+      playersTable.left + 5 + 12,
+    );
 
     // Rien de choisi : une invitation au centre de la carte du détail.
     const prompt = 'Sélectionnez un élément à gauche.';
@@ -274,12 +277,12 @@ void main() {
     final p1 = tester.getRect(find.text('Arthur'));
     final scores = tester.getRect(inList('–'));
     final p2 = tester.getRect(find.text('Lancelot'));
-    expect(p1.left, playersTable.left + 12);
+    expect(p1.left, playersTable.left + 5 + 12);
     expect(
       scores.center.dx,
       moreOrLessEquals(playersTable.left + RowList.listWidth / 2),
     );
-    expect(p2.right, playersTable.left + RowList.listWidth - 12);
+    expect(p2.right, playersTable.left + RowList.listWidth - 5 - 12);
     expect(scores.center.dy, p1.center.dy);
     expect(p2.center.dy, p1.center.dy);
     expect(find.text('Score 1'), findsNothing);
@@ -366,7 +369,10 @@ void main() {
     // ligne ; même hauteur de ligne que la liste de gauche.
     expect(firstValue.center.dy, first.center.dy);
     expect(firstValue.left, greaterThanOrEqualTo(first.right));
-    expect(firstValue.right, tester.getRect(find.byType(RowList)).right - 12);
+    expect(
+      firstValue.right,
+      tester.getRect(find.byType(RowList)).right - 5 - 12,
+    );
     expect(second.top - first.top, master.height + 9);
     // « Nom » : seulement dans l'en-tête de la liste, pas dans le détail.
     expect(find.text('Nom'), findsOneWidget);

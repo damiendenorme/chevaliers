@@ -260,9 +260,18 @@ class _Cards extends StatelessWidget {
         // Carte étroite : son image garde ses proportions, sans être étirée.
         SizedBox(
           width: RowList.listWidth,
-          child: CardSurface(master, fit: BoxFit.cover),
+          child: CardSurface(
+            master,
+            fit: BoxFit.cover,
+            padding: EdgeInsets.zero,
+          ),
         ),
-        Expanded(child: CardSurface(detail ?? const SizedBox.shrink())),
+        Expanded(
+          child: CardSurface(
+            detail ?? const SizedBox.shrink(),
+            padding: EdgeInsets.zero,
+          ),
+        ),
       ],
     );
   }
@@ -905,7 +914,13 @@ class _MasterDetailState extends State<_MasterDetail> {
     final list = SingleChildScrollView(
       // Sans en-tête, le premier élément est baissé de l'épaisseur du
       // bourrelet, comme l'en-tête : il paraît aussi haut que les autres.
-      padding: EdgeInsets.only(top: _sortable ? 0 : BevelEdge.width),
+      // L'écart de la carte est dans le défilement : la barre reste au bord.
+      padding: EdgeInsets.fromLTRB(
+        CardSurface.gutter,
+        _sortable ? 0 : CardSurface.gutter + BevelEdge.width,
+        CardSurface.gutter,
+        CardSurface.gutter,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -970,60 +985,73 @@ class _MasterDetailState extends State<_MasterDetail> {
               children: [
                 // Baissé de l'épaisseur du bourrelet, avec la hauteur de
                 // ligne de la liste : il paraît aussi haut que ses éléments.
-                DecoratedBox(
-                  decoration: BoxDecoration(border: Border(bottom: divider)),
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: BevelEdge.width),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _SortHeader(
-                            'Nom',
-                            arrow: _sortBy == _SortBy.name ? _ascending : null,
-                            onTap: () => _sort(_SortBy.name),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    CardSurface.gutter,
+                    CardSurface.gutter,
+                    CardSurface.gutter,
+                    0,
+                  ),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(border: Border(bottom: divider)),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: BevelEdge.width),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _SortHeader(
+                              'Nom',
+                              arrow: _sortBy == _SortBy.name
+                                  ? _ascending
+                                  : null,
+                              onTap: () => _sort(_SortBy.name),
+                              rowHeight: true,
+                            ),
+                          ),
+                          // Sa droite collée à celle des valeurs ; flèche avant.
+                          _SortHeader(
+                            _valueLabel!,
+                            arrow: _sortBy == _SortBy.score ? _ascending : null,
+                            onTap: () => _sort(_SortBy.score),
                             rowHeight: true,
+                            padding: EdgeInsets.fromLTRB(
+                              12,
+                              4,
+                              table.ids != null ? 0 : 12,
+                              4,
+                            ),
+                            arrowPlacement: _ArrowPlacement.before,
                           ),
-                        ),
-                        // Sa droite collée à celle des valeurs ; flèche avant.
-                        _SortHeader(
-                          _valueLabel!,
-                          arrow: _sortBy == _SortBy.score ? _ascending : null,
-                          onTap: () => _sort(_SortBy.score),
-                          rowHeight: true,
-                          padding: EdgeInsets.fromLTRB(
-                            12,
-                            4,
-                            table.ids != null ? 0 : 12,
-                            4,
-                          ),
-                          arrowPlacement: _ArrowPlacement.before,
-                        ),
-                        // Colonne des ids (joueurs) : son titre au-dessus des
-                        // bannières, tout à droite.
-                        if (table.ids != null)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 8, right: 12),
-                            child: SizedBox(
-                              width: _idColumnWidth,
-                              // Centré sur les bannières, même s'il est plus
-                              // large que leur colonne.
-                              child: Center(
-                                child: _SortHeader(
-                                  'ID',
-                                  arrow: _sortBy == _SortBy.id
-                                      ? _ascending
-                                      : null,
-                                  onTap: () => _sort(_SortBy.id),
-                                  rowHeight: true,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 4,
+                          // Colonne des ids (joueurs) : son titre au-dessus des
+                          // bannières, tout à droite.
+                          if (table.ids != null)
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                left: 8,
+                                right: 12,
+                              ),
+                              child: SizedBox(
+                                width: _idColumnWidth,
+                                // Centré sur les bannières, même s'il est plus
+                                // large que leur colonne.
+                                child: Center(
+                                  child: _SortHeader(
+                                    'ID',
+                                    arrow: _sortBy == _SortBy.id
+                                        ? _ascending
+                                        : null,
+                                    onTap: () => _sort(_SortBy.id),
+                                    rowHeight: true,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 4,
+                                    ),
+                                    arrowPlacement: _ArrowPlacement.centered,
                                   ),
-                                  arrowPlacement: _ArrowPlacement.centered,
                                 ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1042,341 +1070,376 @@ class _MasterDetailState extends State<_MasterDetail> {
             )
           // La zone de photos remplit le bas de la carte (son message, s'il
           // n'y a pas de photo, y est centré).
+          // L'écart de la carte est dans le défilement : la barre reste au
+          // bord.
           : CustomScrollView(
               slivers: [
-                SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _Banner(table.banner(_selected!)),
-                      // Une partie : en grand, à la place de ses colonnes.
-                      if (table.matchDetail(_selected!) case final m?)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 16,
-                          ),
-                          child: _MatchDetailLine(m, stacked: true),
-                        )
-                      else if (table.sessionDetail(_selected!) case final s?)
-                        // Sa liste de joueurs occupe toute la largeur.
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: _sessionDetail(s),
-                        )
-                      else
-                        _Detail(table.entries(_selected!)),
-                      // Un événement Wargame : son type, et le bouton pour le
-                      // choisir une fois connecté.
-                      if (table.eventId(_selected!) case final id?)
-                        _ChoiceLine<EventType>(
-                          value:
-                              _editedEventTypes[id] ??
-                              table.eventType(_selected!),
-                          options: [
-                            for (final t in EventType.values) (t, t.label),
-                          ],
-                          empty: 'Aucun type',
-                          tooltip: 'Choisir le type',
-                          onChoose: switch (widget.onSetEventType) {
-                            final set? => (type) async {
-                              await set(id, type);
-                              if (mounted) {
-                                setState(() => _editedEventTypes[id] = type);
-                              }
-                            },
-                            null => null,
-                          },
-                        ),
-                      // Élimination : son nombre de tours (premier tour),
-                      // choisi de la même façon.
-                      if (table.eventId(_selected!) case final id?
-                          when (_editedEventTypes[id] ??
-                                  table.eventType(_selected!)) ==
-                              EventType.elimination)
-                        _ChoiceLine<EliminationRound>(
-                          value:
-                              _editedEventRounds[id] ??
-                              table.eventRound(_selected!),
-                          options: [
-                            for (final r in EliminationRound.values)
-                              (r, r.label),
-                          ],
-                          empty: 'Aucun nombre de tours',
-                          tooltip: 'Choisir le nombre de tours',
-                          onChoose: switch (widget.onSetEventRounds) {
-                            final set? => (rounds) async {
-                              await set(id, rounds);
-                              if (mounted) {
-                                setState(() => _editedEventRounds[id] = rounds);
-                              }
-                            },
-                            null => null,
-                          },
-                        ),
-                      // Championnat : aller ou aller-retour, playoffs et
-                      // barème, choisis de la même façon.
-                      if ((
-                            table.eventId(_selected!),
-                            table.eventChampionship(_selected!),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    CardSurface.gutter,
+                    CardSurface.gutter,
+                    CardSurface.gutter,
+                    0,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _Banner(table.banner(_selected!)),
+                        // Une partie : en grand, à la place de ses colonnes.
+                        if (table.matchDetail(_selected!) case final m?)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 16,
+                            ),
+                            child: _MatchDetailLine(m, stacked: true),
                           )
-                          case (final id?, final c?)
-                          when (_editedEventTypes[id] ??
-                                  table.eventType(_selected!)) ==
-                              EventType.championnat)
-                        ..._championshipSettings(id, c),
-                      // Suisse : nombre de tours, taille des groupes et
-                      // playoffs.
-                      if ((
-                            table.eventId(_selected!),
-                            table.eventSwissOf(_selected!),
+                        else if (table.sessionDetail(_selected!) case final s?)
+                          // Sa liste de joueurs occupe toute la largeur.
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: _sessionDetail(s),
                           )
-                          case (final id?, final sw?)
-                          when _eventType() == EventType.suisse)
-                        ..._swissSettings(id, sw),
-                      // Puis son jeu, choisi de la même façon.
-                      if (table.eventId(_selected!) case final id?)
-                        _EventGameLine(
-                          table.eventGame(_selected!)?.$2,
-                          games: table.gameOptions,
-                          onChoose: switch (widget.eventEditor) {
-                            final editor? => (game) => editor.setGame(id, game),
-                            null => null,
-                          },
-                        ),
-                      // Élimination dont le nombre de tours est choisi : son
-                      // tableau.
-                      if ((
-                            table.eventId(_selected!),
-                            table.eventBracket(_selected!),
-                          )
-                          case (final id?, final bracket?)
-                          when (_editedEventTypes[id] ??
-                                  table.eventType(_selected!)) ==
-                              EventType.elimination)
-                        _eventBracket(id, bracket),
-                      // Championnat : classement, calendrier et playoffs.
-                      if ((
-                            table.eventId(_selected!),
-                            table.eventChampionship(_selected!),
-                          )
-                          case (final id?, final c?)
-                          when (_editedEventTypes[id] ??
-                                  table.eventType(_selected!)) ==
-                              EventType.championnat)
-                        _championshipBoard(id, c),
-                      // Suisse : classement, tours et playoffs.
-                      if ((
-                            table.eventId(_selected!),
-                            table.eventSwissOf(_selected!),
-                          )
-                          case (final id?, final sw?)
-                          when _eventType() == EventType.suisse)
-                        _swissBoard(id, sw),
-                      // Un événement : ceux qui y ont joué, triables. Pas
-                      // pour un championnat : son classement les montre.
-                      if (table.eventDetail(_selected!) case final e?
-                          when !_hasStandings())
-                        Padding(
-                          // Puis, un peu plus bas, la liste de ses parties.
-                          padding: const EdgeInsets.only(top: 16, bottom: 24),
-                          child: _EventPlayers(
-                            key: ValueKey(('joueurs', _selected)),
-                            e.players,
-                            // Connecté seulement : « Aucun joueur. ».
-                            showEmpty:
-                                widget.eventEditor != null &&
-                                table.eventId(_selected!) != null,
-                            // Connecté (Wargame) : inscrire ou retirer des
-                            // joueurs ; pas ceux qui ont déjà joué.
-                            locked: table.eventPlayedBy(_selected!),
-                            onRemove: switch ((
-                              widget.eventEditor,
-                              table.eventId(_selected!),
-                            )) {
-                              (final editor?, final id?) => (
-                                player,
-                              ) => editor.remove(id, player),
-                              _ => null,
-                            },
-                            onAdd: switch ((
-                              widget.eventEditor,
-                              table.eventId(_selected!),
-                            )) {
-                              (final editor?, final id?) => () async {
-                                final chosen = await showDialog<(int, String)>(
-                                  context: context,
-                                  builder: (_) => AccentScope(
-                                    style: AccentStyle.of(context),
-                                    child: _PlayerPicker(
-                                      title: 'Ajouter un joueur',
-                                      players: editor.players(),
-                                      exclude: {
-                                        for (final p in e.players) p.id,
-                                      },
-                                    ),
-                                  ),
-                                );
-                                if (chosen != null) {
-                                  await editor.add(id, chosen.$1);
+                        else
+                          _Detail(table.entries(_selected!)),
+                        // Un événement Wargame : son type, et le bouton pour le
+                        // choisir une fois connecté.
+                        if (table.eventId(_selected!) case final id?)
+                          _ChoiceLine<EventType>(
+                            value:
+                                _editedEventTypes[id] ??
+                                table.eventType(_selected!),
+                            options: [
+                              for (final t in EventType.values) (t, t.label),
+                            ],
+                            empty: 'Aucun type',
+                            tooltip: 'Choisir le type',
+                            onChoose: switch (widget.onSetEventType) {
+                              final set? => (type) async {
+                                await set(id, type);
+                                if (mounted) {
+                                  setState(() => _editedEventTypes[id] = type);
                                 }
                               },
-                              _ => null,
-                            },
-                            // Un clic sur un joueur y mène.
-                            onTap: switch (widget.onNavigate) {
-                              final go? => (id) => go('joueur', id),
                               null => null,
                             },
                           ),
-                        ),
-                      _SessionLines(
-                        table.sessionLinesOf(_selected!),
-                        // Connecté (RPG) : sous les parties d'un événement,
-                        // un bouton pour en ajouter une.
-                        onAdd: switch ((
-                          widget.onAddEventSession,
-                          table.eventDetail(_selected!),
-                          table.rowId(_selected!),
-                        )) {
-                          (final add?, _?, final id?) => () => add(id),
-                          _ => null,
-                        },
-                        // Un clic sur une partie y mène (si on connaît son id).
-                        onTap: switch ((
-                          widget.onNavigate,
-                          table.sessionLineIds?[_selected!],
-                        )) {
-                          (final go?, final ids?) => (i) => go(
-                            'partie',
-                            ids[i],
+                        // Élimination : son nombre de tours (premier tour),
+                        // choisi de la même façon.
+                        if (table.eventId(_selected!) case final id?
+                            when (_editedEventTypes[id] ??
+                                    table.eventType(_selected!)) ==
+                                EventType.elimination)
+                          _ChoiceLine<EliminationRound>(
+                            value:
+                                _editedEventRounds[id] ??
+                                table.eventRound(_selected!),
+                            options: [
+                              for (final r in EliminationRound.values)
+                                (r, r.label),
+                            ],
+                            empty: 'Aucun nombre de tours',
+                            tooltip: 'Choisir le nombre de tours',
+                            onChoose: switch (widget.onSetEventRounds) {
+                              final set? => (rounds) async {
+                                await set(id, rounds);
+                                if (mounted) {
+                                  setState(
+                                    () => _editedEventRounds[id] = rounds,
+                                  );
+                                }
+                              },
+                              null => null,
+                            },
                           ),
-                          _ => null,
-                        },
-                      ),
-                      // Une clé par ligne : le tri repart de zéro à chaque
-                      // changement de ligne.
-                      _LineList(
-                        key: ValueKey(_selected),
-                        table.list(_selected!),
-                        sortable: table.sortableLists,
-                        ranked: table.rankedLists,
-                        forms: table.listForm(_selected!),
-                        // Un clic sur un élément (jeu, joueur) y mène.
-                        onTap: switch ((
-                          widget.onNavigate,
-                          table.listIds?[_selected!],
-                        )) {
-                          (final go?, final ids?) => (i) => go(
-                            table.listTable,
-                            ids[i],
+                        // Championnat : aller ou aller-retour, playoffs et
+                        // barème, choisis de la même façon.
+                        if ((
+                              table.eventId(_selected!),
+                              table.eventChampionship(_selected!),
+                            )
+                            case (final id?, final c?)
+                            when (_editedEventTypes[id] ??
+                                    table.eventType(_selected!)) ==
+                                EventType.championnat)
+                          ..._championshipSettings(id, c),
+                        // Suisse : nombre de tours, taille des groupes et
+                        // playoffs.
+                        if ((
+                              table.eventId(_selected!),
+                              table.eventSwissOf(_selected!),
+                            )
+                            case (final id?, final sw?)
+                            when _eventType() == EventType.suisse)
+                          ..._swissSettings(id, sw),
+                        // Puis son jeu, choisi de la même façon.
+                        if (table.eventId(_selected!) case final id?)
+                          _EventGameLine(
+                            table.eventGame(_selected!)?.$2,
+                            games: table.gameOptions,
+                            onChoose: switch (widget.eventEditor) {
+                              final editor? => (game) => editor.setGame(
+                                id,
+                                game,
+                              ),
+                              null => null,
+                            },
                           ),
-                          _ => null,
-                        },
-                      ),
-                      _MatchupList(
-                        key: ValueKey(('parties', _selected)),
-                        table.matchList(_selected!),
-                        showGame: table.matchListShowsGame,
-                        // Un clic sur une partie y mène.
-                        onTap: switch ((
-                          widget.onNavigate,
-                          table.matchListIds?[_selected!],
-                        )) {
-                          (final go?, final ids?) => (i) => go(
-                            'partie',
-                            ids[i],
-                          ),
-                          _ => null,
-                        },
-                      ),
-                      // Événement Wargame sans partie, connecté : « Aucune
-                      // partie. ».
-                      if (widget.eventEditor != null &&
-                          table.eventId(_selected!) != null &&
-                          table.matchList(_selected!).isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            'Aucune partie.',
-                            textAlign: TextAlign.center,
-                            style: _text.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
+                        // Élimination dont le nombre de tours est choisi : son
+                        // tableau.
+                        if ((
+                              table.eventId(_selected!),
+                              table.eventBracket(_selected!),
+                            )
+                            case (final id?, final bracket?)
+                            when (_editedEventTypes[id] ??
+                                    table.eventType(_selected!)) ==
+                                EventType.elimination)
+                          _eventBracket(id, bracket),
+                        // Championnat : classement, calendrier et playoffs.
+                        if ((
+                              table.eventId(_selected!),
+                              table.eventChampionship(_selected!),
+                            )
+                            case (final id?, final c?)
+                            when (_editedEventTypes[id] ??
+                                    table.eventType(_selected!)) ==
+                                EventType.championnat)
+                          _championshipBoard(id, c),
+                        // Suisse : classement, tours et playoffs.
+                        if ((
+                              table.eventId(_selected!),
+                              table.eventSwissOf(_selected!),
+                            )
+                            case (final id?, final sw?)
+                            when _eventType() == EventType.suisse)
+                          _swissBoard(id, sw),
+                        // Un événement : ceux qui y ont joué, triables. Pas
+                        // pour un championnat : son classement les montre.
+                        if (table.eventDetail(_selected!) case final e?
+                            when !_hasStandings())
+                          Padding(
+                            // Puis, un peu plus bas, la liste de ses parties.
+                            padding: const EdgeInsets.only(top: 16, bottom: 24),
+                            child: _EventPlayers(
+                              key: ValueKey(('joueurs', _selected)),
+                              e.players,
+                              // Connecté seulement : « Aucun joueur. ».
+                              showEmpty:
+                                  widget.eventEditor != null &&
+                                  table.eventId(_selected!) != null,
+                              // Connecté (Wargame) : inscrire ou retirer des
+                              // joueurs ; pas ceux qui ont déjà joué.
+                              locked: table.eventPlayedBy(_selected!),
+                              onRemove: switch ((
+                                widget.eventEditor,
+                                table.eventId(_selected!),
+                              )) {
+                                (final editor?, final id?) => (
+                                  player,
+                                ) => editor.remove(id, player),
+                                _ => null,
+                              },
+                              onAdd: switch ((
+                                widget.eventEditor,
+                                table.eventId(_selected!),
+                              )) {
+                                (final editor?, final id?) => () async {
+                                  final chosen =
+                                      await showDialog<(int, String)>(
+                                        context: context,
+                                        builder: (_) => AccentScope(
+                                          style: AccentStyle.of(context),
+                                          child: _PlayerPicker(
+                                            title: 'Ajouter un joueur',
+                                            players: editor.players(),
+                                            exclude: {
+                                              for (final p in e.players) p.id,
+                                            },
+                                          ),
+                                        ),
+                                      );
+                                  if (chosen != null) {
+                                    await editor.add(id, chosen.$1);
+                                  }
+                                },
+                                _ => null,
+                              },
+                              // Un clic sur un joueur y mène.
+                              onTap: switch (widget.onNavigate) {
+                                final go? => (id) => go('joueur', id),
+                                null => null,
+                              },
                             ),
                           ),
-                        ),
-                      // Connecté (Wargame) : ajouter une partie à
-                      // l'événement, entre ses joueurs.
-                      // Seulement une fois le jeu de l'événement choisi.
-                      if ((
-                            widget.eventEditor,
-                            table.eventId(_selected!),
+                        _SessionLines(
+                          table.sessionLinesOf(_selected!),
+                          // Connecté (RPG) : sous les parties d'un événement,
+                          // un bouton pour en ajouter une.
+                          onAdd: switch ((
+                            widget.onAddEventSession,
                             table.eventDetail(_selected!),
-                            table.eventGame(_selected!),
-                          )
-                          case (
-                            final editor?,
-                            final id?,
-                            final e?,
-                            (final game, _),
-                          ))
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Center(
-                            child: AddButton(
-                              label: 'Ajouter une partie',
-                              onPressed: () => editor.addParty(id, game, [
-                                for (final p in e.players) (p.id, p.name),
-                              ]),
+                            table.rowId(_selected!),
+                          )) {
+                            (final add?, _?, final id?) => () => add(id),
+                            _ => null,
+                          },
+                          // Un clic sur une partie y mène (si on connaît son id).
+                          onTap: switch ((
+                            widget.onNavigate,
+                            table.sessionLineIds?[_selected!],
+                          )) {
+                            (final go?, final ids?) => (i) => go(
+                              'partie',
+                              ids[i],
+                            ),
+                            _ => null,
+                          },
+                        ),
+                        // Une clé par ligne : le tri repart de zéro à chaque
+                        // changement de ligne.
+                        _LineList(
+                          key: ValueKey(_selected),
+                          table.list(_selected!),
+                          sortable: table.sortableLists,
+                          ranked: table.rankedLists,
+                          forms: table.listForm(_selected!),
+                          // Un clic sur un élément (jeu, joueur) y mène.
+                          onTap: switch ((
+                            widget.onNavigate,
+                            table.listIds?[_selected!],
+                          )) {
+                            (final go?, final ids?) => (i) => go(
+                              table.listTable,
+                              ids[i],
+                            ),
+                            _ => null,
+                          },
+                        ),
+                        _MatchupList(
+                          key: ValueKey(('parties', _selected)),
+                          table.matchList(_selected!),
+                          showGame: table.matchListShowsGame,
+                          // Un clic sur une partie y mène.
+                          onTap: switch ((
+                            widget.onNavigate,
+                            table.matchListIds?[_selected!],
+                          )) {
+                            (final go?, final ids?) => (i) => go(
+                              'partie',
+                              ids[i],
+                            ),
+                            _ => null,
+                          },
+                        ),
+                        // Événement Wargame sans partie, connecté : « Aucune
+                        // partie. ».
+                        if (widget.eventEditor != null &&
+                            table.eventId(_selected!) != null &&
+                            table.matchList(_selected!).isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              'Aucune partie.',
+                              textAlign: TextAlign.center,
+                              style: _text.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
                             ),
                           ),
-                        ),
-                    ],
+                        // Connecté (Wargame) : ajouter une partie à
+                        // l'événement, entre ses joueurs.
+                        // Seulement une fois le jeu de l'événement choisi.
+                        if ((
+                              widget.eventEditor,
+                              table.eventId(_selected!),
+                              table.eventDetail(_selected!),
+                              table.eventGame(_selected!),
+                            )
+                            case (
+                              final editor?,
+                              final id?,
+                              final e?,
+                              (final game, _),
+                            ))
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: Center(
+                              child: AddButton(
+                                label: 'Ajouter une partie',
+                                onPressed: () => editor.addParty(id, game, [
+                                  for (final p in e.players) (p.id, p.name),
+                                ]),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
                 // Entre les informations et les photos : le résumé.
                 if (table.summaries != null)
-                  SliverToBoxAdapter(
-                    child: _Summary(
-                      switch (table.partyId(_selected!)) {
-                        final id? when _editedSummaries.containsKey(id) =>
-                          _editedSummaries[id],
-                        _ => table.summary(_selected!),
-                      },
-                      onEdit: switch ((
-                        widget.onEditSummary,
-                        table.partyId(_selected!),
-                      )) {
-                        (final edit?, final id?) => (text) async {
-                          await edit(id, text);
-                          if (mounted) {
-                            setState(() => _editedSummaries[id] = text);
-                          }
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: CardSurface.gutter,
+                    ),
+                    sliver: SliverToBoxAdapter(
+                      child: _Summary(
+                        switch (table.partyId(_selected!)) {
+                          final id? when _editedSummaries.containsKey(id) =>
+                            _editedSummaries[id],
+                          _ => table.summary(_selected!),
                         },
-                        _ => null,
-                      },
+                        onEdit: switch ((
+                          widget.onEditSummary,
+                          table.partyId(_selected!),
+                        )) {
+                          (final edit?, final id?) => (text) async {
+                            await edit(id, text);
+                            if (mounted) {
+                              setState(() => _editedSummaries[id] = text);
+                            }
+                          },
+                          _ => null,
+                        },
+                      ),
                     ),
                   ),
                 if (table.photosOf(_selected!) case final urls?)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _PhotoZone(
-                      [...urls, ...?_addedPhotos[table.partyId(_selected!)]],
-                      onAdd: switch ((
-                        widget.onAddPhoto,
-                        table.partyId(_selected!),
-                      )) {
-                        (final add?, final id?) => () async {
-                          final url = await add(id);
-                          if (url != null && mounted) {
-                            setState(() => (_addedPhotos[id] ??= []).add(url));
-                          }
-                        },
-                        _ => null,
-                      },
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(
+                      CardSurface.gutter,
+                      0,
+                      CardSurface.gutter,
+                      CardSurface.gutter,
                     ),
+                    sliver: SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: _PhotoZone(
+                        [...urls, ...?_addedPhotos[table.partyId(_selected!)]],
+                        onAdd: switch ((
+                          widget.onAddPhoto,
+                          table.partyId(_selected!),
+                        )) {
+                          (final add?, final id?) => () async {
+                            final url = await add(id);
+                            if (url != null && mounted) {
+                              setState(
+                                () => (_addedPhotos[id] ??= []).add(url),
+                              );
+                            }
+                          },
+                          _ => null,
+                        },
+                      ),
+                    ),
+                  )
+                else
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: CardSurface.gutter),
                   ),
               ],
             ),
@@ -1893,6 +1956,9 @@ class _PlayerPicker extends StatelessWidget {
       child: SizedBox(
         width: 320,
         child: CardSurface(
+          // L'écart de la carte, à gauche et à droite, est dans le
+          // défilement : la barre reste au bord.
+          padding: const EdgeInsets.symmetric(vertical: CardSurface.gutter),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: FutureBuilder<List<(int, String)>>(
@@ -1937,6 +2003,9 @@ class _PlayerPicker extends StatelessWidget {
                     else
                       Flexible(
                         child: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: CardSurface.gutter,
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -1966,7 +2035,10 @@ class _PlayerPicker extends StatelessWidget {
                         ),
                       ),
                     Padding(
-                      padding: const EdgeInsets.only(top: 12, right: 12),
+                      padding: const EdgeInsets.only(
+                        top: 12,
+                        right: CardSurface.gutter + 12,
+                      ),
                       child: Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
