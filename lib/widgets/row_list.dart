@@ -915,55 +915,72 @@ class _MasterDetailState extends State<_MasterDetail> {
       // Sans en-tête, le premier élément est baissé de l'épaisseur du
       // bourrelet, comme l'en-tête : il paraît aussi haut que les autres.
       // L'écart de la carte est dans le défilement : la barre reste au bord.
-      padding: EdgeInsets.fromLTRB(
-        CardSurface.gutter,
-        _sortable ? 0 : CardSurface.gutter + BevelEdge.width,
-        CardSurface.gutter,
-        CardSurface.gutter,
+      // Celui de gauche et de droite est autour de chaque élément.
+      padding: EdgeInsets.only(
+        top: _sortable ? 0 : CardSurface.gutter + BevelEdge.width,
+        bottom: CardSurface.gutter,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final i in _order(table))
-            Material(
-              // Transparente : le fond de la carte reste visible. Choisie :
-              // le fond texturé doré.
-              color: Colors.transparent,
-              // Choisie : tout autour, une bordure grise un peu plus claire.
-              shape: i == _selected
-                  ? Border.all(color: AccentStyle.of(context).border)
-                  : const Border(bottom: divider),
-              child: Ink(
-                decoration: i == _selected
-                    ? AccentStyle.of(context).texture
-                    : null,
-                // Choisie : pas de survol, son fond reste visible. La clé
-                // recrée l'encre au changement : un survol affiché disparaît.
-                child: InkWell(
-                  key: ValueKey(i == _selected),
-                  onTap: () => setState(() => _selected = i),
-                  // Survol bombé (voir [HoverBulge]), sauf si elle est
-                  // choisie.
-                  hoverColor: Colors.transparent,
-                  child: HoverBulge(
-                    enabled: i != _selected,
-                    // Choisie : en creux, comme le libellé actif de la barre
-                    // (ombre portée interne en haut).
-                    child: DecoratedBox(
-                      position: DecorationPosition.foreground,
-                      decoration: i == _selected
-                          ? const BoxDecoration(gradient: _insetShadow)
-                          : const BoxDecoration(),
-                      child: Padding(
-                        padding: _cellPadding,
-                        child: _MasterLine(
-                          table,
-                          i,
-                          rank: ranks?[i],
-                          selected: i == _selected,
-                          style: i == _selected
-                              ? _text.copyWith(color: Colors.white)
-                              : _text,
+            // Choisie : elle va jusqu'aux bords de la carte ; son contenu,
+            // lui, reste à l'écart de la carte.
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: i == _selected ? 0 : CardSurface.gutter,
+              ),
+              child: Material(
+                // Transparente : le fond de la carte reste visible. Choisie :
+                // le fond texturé doré.
+                color: Colors.transparent,
+                // Choisie : en haut et en bas, une bordure grise un peu plus
+                // claire.
+                shape: i == _selected
+                    ? Border.symmetric(
+                        horizontal: BorderSide(
+                          color: AccentStyle.of(context).border,
+                        ),
+                      )
+                    : const Border(bottom: divider),
+                child: Ink(
+                  decoration: i == _selected
+                      ? AccentStyle.of(context).texture
+                      : null,
+                  // Choisie : pas de survol, son fond reste visible. La clé
+                  // recrée l'encre au changement : un survol affiché disparaît.
+                  child: InkWell(
+                    key: ValueKey(i == _selected),
+                    onTap: () => setState(() => _selected = i),
+                    // Survol bombé (voir [HoverBulge]), sauf si elle est
+                    // choisie.
+                    hoverColor: Colors.transparent,
+                    child: HoverBulge(
+                      enabled: i != _selected,
+                      // Choisie : en creux, comme le libellé actif de la barre
+                      // (ombre portée interne en haut).
+                      child: DecoratedBox(
+                        position: DecorationPosition.foreground,
+                        decoration: i == _selected
+                            ? const BoxDecoration(gradient: _insetShadow)
+                            : const BoxDecoration(),
+                        child: Padding(
+                          padding: i == _selected
+                              ? _cellPadding.add(
+                                  const EdgeInsets.symmetric(
+                                    horizontal: CardSurface.gutter,
+                                  ),
+                                )
+                              : _cellPadding,
+                          child: _MasterLine(
+                            table,
+                            i,
+                            rank: ranks?[i],
+                            selected: i == _selected,
+                            style: i == _selected
+                                ? _text.copyWith(color: Colors.white)
+                                : _text,
+                          ),
                         ),
                       ),
                     ),
