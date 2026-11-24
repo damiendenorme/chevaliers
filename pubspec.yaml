@@ -75,6 +75,9 @@ flutter:
   assets:
     - assets/Table.jpg
     - assets/Carte.jpg
+    # Emblèmes de la bannière du titre.
+    - assets/croix-occitane.jpg
+    - assets/black-silhouette-of-a-rampant-lion-heraldic-symbol-vector.jpg
     - assets/icons/
     - assets/bannieres/joueur/
     - assets/bannieres/evenement/
