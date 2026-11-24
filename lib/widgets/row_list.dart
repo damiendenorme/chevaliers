@@ -40,9 +40,17 @@ typedef EventEditor = ({
     bool? returnLeg,
     Playoffs? playoffs,
     ChampionshipPoints? points,
+    int? swissRounds,
+    int? groupSize,
   })
   setChampionship,
-  Future<void> Function(int eventId, int gameId, PartyScore result) playFixture,
+  Future<void> Function(
+    int eventId,
+    int gameId,
+    PartyScore result, {
+    int? round,
+  })
+  playFixture,
 });
 
 class RowList extends StatelessWidget {
@@ -431,14 +439,17 @@ class _MasterDetailState extends State<_MasterDetail> {
     );
   }
 
-  /// L'événement choisi est un championnat (type choisi depuis le
-  /// chargement compris).
-  bool _isChampionship() => switch (widget.table.eventId(_selected!)) {
-    final id? =>
-      (_editedEventTypes[id] ?? widget.table.eventType(_selected!)) ==
-          EventType.championnat,
-    null => false,
+  /// Type de l'événement choisi (type choisi depuis le chargement
+  /// compris).
+  EventType? _eventType() => switch (widget.table.eventId(_selected!)) {
+    final id? => _editedEventTypes[id] ?? widget.table.eventType(_selected!),
+    null => null,
   };
+
+  /// L'événement choisi a son propre classement de joueurs (championnat,
+  /// suisse) : pas de liste des joueurs à part.
+  bool _hasStandings() =>
+      _eventType() == EventType.championnat || _eventType() == EventType.suisse;
 
   /// Réglages du championnat de l'événement [eventId] : aller simple ou
   /// aller-retour, playoffs et barème, chacun avec son bouton (connecté).
@@ -475,112 +486,243 @@ class _MasterDetailState extends State<_MasterDetail> {
     ];
   }
 
+  /// Titre d'une partie du détail d'un tournoi : « Classement »…
+  Widget _heading(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Text(
+      text,
+      textAlign: TextAlign.center,
+      style: _text.copyWith(
+        fontSize: 12,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    ),
+  );
+
+  /// Classement [standings] de l'événement [eventId], sous son titre
+  /// [heading] ; avec [leadLabel], sa valeur en premier sous ce nom
+  /// (Gloire, ELO). Connecté : l'inscription et le retrait des joueurs.
+  Widget _eventStandings(
+    int eventId,
+    List<Standing> standings,
+    String heading, {
+    String? leadLabel,
+  }) {
+    final editor = widget.eventEditor;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (standings.isNotEmpty) _heading(heading),
+        _Standings(
+          key: ValueKey(('classement', _selected)),
+          standings,
+          leadLabel: leadLabel,
+          onTap: switch (widget.onNavigate) {
+            final go? => (id) => go('joueur', id),
+            null => null,
+          },
+          // Connecté : inscrire ou retirer des joueurs ; pas ceux qui ont
+          // déjà joué.
+          locked: widget.table.eventPlayedBy(_selected!),
+          onRemove: switch (editor) {
+            final editor? => (player) => editor.remove(eventId, player),
+            null => null,
+          },
+          onAdd: switch (editor) {
+            final editor? => () async {
+              final chosen = await showDialog<(int, String)>(
+                context: context,
+                builder: (_) => AccentScope(
+                  style: AccentStyle.of(context),
+                  child: _PlayerPicker(
+                    title: 'Ajouter un joueur',
+                    players: editor.players(),
+                    exclude: {for (final s in standings) s.player.$1},
+                  ),
+                ),
+              );
+              if (chosen != null) await editor.add(eventId, chosen.$1);
+            },
+            null => null,
+          },
+        ),
+      ],
+    );
+  }
+
+  /// Saisie des scores d'une rencontre de l'événement [eventId] (du tour
+  /// [round] d'un suisse) : connecté, une fois le jeu choisi ; le nul est
+  /// permis. La rencontre devient une partie.
+  Future<void> Function(Fixture fixture)? _fixturePlayer(
+    int eventId, {
+    int? round,
+  }) {
+    final editor = widget.eventEditor;
+    final game = widget.table.eventGame(_selected!)?.$1;
+    if (editor == null || game == null) return null;
+    return (f) async {
+      final scores = await showDialog<(int, int)>(
+        context: context,
+        builder: (_) => AccentScope(
+          style: AccentStyle.of(context),
+          child: _ScoreDialog(f.player1.$2, f.player2.$2, allowDraw: true),
+        ),
+      );
+      if (scores == null) return;
+      await editor.playFixture(eventId, game, (
+        player1: f.player1.$1,
+        player2: f.player2.$1,
+        score1: scores.$1,
+        score2: scores.$2,
+      ), round: round);
+    };
+  }
+
+  /// Playoffs de l'événement [eventId] : leur tableau, dont les joueurs
+  /// viennent du classement.
+  Widget _playoffs(int eventId, List<List<BracketMatch>> bracket) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _heading('Playoffs'),
+      _eventBracket(
+        eventId,
+        bracket,
+        pickable: false,
+        padding: const EdgeInsets.only(top: 8, bottom: 16),
+      ),
+    ],
+  );
+
   /// Championnat de l'événement [eventId] : son classement, son calendrier
   /// (connecté, une fois le jeu choisi : un clic sur une rencontre fait
   /// saisir ses scores, et elle devient une partie), puis ses playoffs.
   Widget _championshipBoard(int eventId, Championship c) {
-    final editor = widget.eventEditor;
-    final game = widget.table.eventGame(_selected!)?.$1;
-    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    Widget heading(String text) => Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: _text.copyWith(fontSize: 12, color: muted),
-      ),
-    );
     return Padding(
       padding: const EdgeInsets.only(top: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 24,
         children: [
-          if (c.standings.isNotEmpty || editor != null)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (c.standings.isNotEmpty) heading('Classement'),
-                _Standings(
-                  key: ValueKey(('classement', _selected)),
-                  c.standings,
-                  glory: c.points.glory,
-                  onTap: switch (widget.onNavigate) {
-                    final go? => (id) => go('joueur', id),
-                    null => null,
-                  },
-                  // Connecté : inscrire ou retirer des joueurs ; pas ceux qui
-                  // ont déjà joué.
-                  locked: widget.table.eventPlayedBy(_selected!),
-                  onRemove: switch (editor) {
-                    final editor? => (player) => editor.remove(eventId, player),
-                    null => null,
-                  },
-                  onAdd: switch (editor) {
-                    final editor? => () async {
-                      final chosen = await showDialog<(int, String)>(
-                        context: context,
-                        builder: (_) => AccentScope(
-                          style: AccentStyle.of(context),
-                          child: _PlayerPicker(
-                            title: 'Ajouter un joueur',
-                            players: editor.players(),
-                            exclude: {for (final s in c.standings) s.player.$1},
-                          ),
-                        ),
-                      );
-                      if (chosen != null) await editor.add(eventId, chosen.$1);
-                    },
-                    null => null,
-                  },
-                ),
-              ],
+          if (c.standings.isNotEmpty || widget.eventEditor != null)
+            _eventStandings(
+              eventId,
+              c.standings,
+              'Classement',
+              leadLabel: c.points.glory ? 'Gloire' : null,
             ),
           if (c.fixtures.isNotEmpty)
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                heading('Calendrier'),
-                _Calendar(
-                  c.fixtures,
-                  onPlay: (editor == null || game == null)
-                      ? null
-                      : (f) async {
-                          final scores = await showDialog<(int, int)>(
-                            context: context,
-                            builder: (_) => AccentScope(
-                              style: AccentStyle.of(context),
-                              child: _ScoreDialog(
-                                f.player1.$2,
-                                f.player2.$2,
-                                allowDraw: true,
-                              ),
-                            ),
-                          );
-                          if (scores == null) return;
-                          await editor.playFixture(eventId, game, (
-                            player1: f.player1.$1,
-                            player2: f.player2.$1,
-                            score1: scores.$1,
-                            score2: scores.$2,
-                          ));
-                        },
-                ),
+                _heading('Calendrier'),
+                _Calendar(c.fixtures, onPlay: _fixturePlayer(eventId)),
               ],
             ),
-          if (c.playoffBracket case final bracket?)
+          if (c.playoffBracket case final bracket?) _playoffs(eventId, bracket),
+        ],
+      ),
+    );
+  }
+
+  /// Réglages du suisse de l'événement [eventId] : nombre de tours, joueurs
+  /// par groupe et playoffs, chacun avec son bouton (connecté).
+  List<Widget> _swissSettings(int eventId, Swiss sw) {
+    final editor = widget.eventEditor;
+    return [
+      _ChoiceLine<int>(
+        value: sw.roundCount,
+        options: [
+          for (var n = 1; n <= 10; n++) (n, n == 1 ? '1 tour' : '$n tours'),
+        ],
+        empty: 'Aucun nombre de tours',
+        tooltip: 'Choisir le nombre de tours',
+        onChoose: switch (editor) {
+          final editor? => (v) => editor.setChampionship(
+            eventId,
+            swissRounds: v,
+          ),
+          null => null,
+        },
+      ),
+      _ChoiceLine<int>(
+        value: sw.groupSize,
+        options: [for (var n = 2; n <= 16; n++) (n, 'Groupes de $n joueurs')],
+        empty: 'Aucune taille de groupe',
+        tooltip: 'Choisir la taille des groupes',
+        onChoose: switch (editor) {
+          final editor? => (v) => editor.setChampionship(eventId, groupSize: v),
+          null => null,
+        },
+      ),
+      _ChoiceLine<Playoffs>(
+        value: sw.playoffs,
+        options: [for (final p in Playoffs.values) (p, p.label)],
+        empty: 'Playoffs non choisis',
+        tooltip: 'Choisir les playoffs',
+        onChoose: switch (editor) {
+          final editor? => (v) => editor.setChampionship(eventId, playoffs: v),
+          null => null,
+        },
+      ),
+    ];
+  }
+
+  /// Suisse de l'événement [eventId] : son classement général (final une
+  /// fois fini), ses tours formés jusqu'ici, groupe par groupe (connecté,
+  /// un clic sur une rencontre fait saisir ses scores), le tour suivant à
+  /// venir, puis ses playoffs.
+  Widget _swissBoard(int eventId, Swiss sw) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final remaining = switch (sw.roundCount) {
+      final count? => count - sw.rounds.length,
+      null => 0,
+    };
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 24,
+        children: [
+          if (sw.standings.isNotEmpty || widget.eventEditor != null)
+            _eventStandings(
+              eventId,
+              sw.standings,
+              sw.finished ? 'Classement final' : 'Classement général',
+              leadLabel: 'ELO',
+            ),
+          for (final (r, groups) in sw.rounds.indexed)
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                heading('Playoffs'),
-                _eventBracket(
-                  eventId,
-                  bracket,
-                  pickable: false,
-                  padding: const EdgeInsets.only(top: 8, bottom: 16),
-                ),
+                _heading('Tour ${r + 1}'),
+                for (final (g, fixtures) in groups.indexed) ...[
+                  if (groups.length > 1)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        'Groupe ${g + 1}',
+                        textAlign: TextAlign.center,
+                        style: _text.copyWith(fontSize: 12, color: muted),
+                      ),
+                    ),
+                  _Calendar(
+                    fixtures,
+                    showDays: false,
+                    onPlay: _fixturePlayer(eventId, round: r),
+                  ),
+                ],
               ],
             ),
+          // Le tour suivant se forme une fois celui-ci joué.
+          if (remaining > 0 && sw.rounds.isNotEmpty)
+            Text(
+              'Tour ${sw.rounds.length + 1} : formé à la fin du tour '
+              '${sw.rounds.length}.',
+              textAlign: TextAlign.center,
+              style: _text.copyWith(color: muted),
+            ),
+          if (sw.playoffBracket case final bracket?)
+            _playoffs(eventId, bracket),
         ],
       ),
     );
@@ -972,6 +1114,15 @@ class _MasterDetailState extends State<_MasterDetail> {
                                   table.eventType(_selected!)) ==
                               EventType.championnat)
                         ..._championshipSettings(id, c),
+                      // Suisse : nombre de tours, taille des groupes et
+                      // playoffs.
+                      if ((
+                            table.eventId(_selected!),
+                            table.eventSwissOf(_selected!),
+                          )
+                          case (final id?, final sw?)
+                          when _eventType() == EventType.suisse)
+                        ..._swissSettings(id, sw),
                       // Puis son jeu, choisi de la même façon.
                       if (table.eventId(_selected!) case final id?)
                         _EventGameLine(
@@ -1003,10 +1154,18 @@ class _MasterDetailState extends State<_MasterDetail> {
                                   table.eventType(_selected!)) ==
                               EventType.championnat)
                         _championshipBoard(id, c),
+                      // Suisse : classement, tours et playoffs.
+                      if ((
+                            table.eventId(_selected!),
+                            table.eventSwissOf(_selected!),
+                          )
+                          case (final id?, final sw?)
+                          when _eventType() == EventType.suisse)
+                        _swissBoard(id, sw),
                       // Un événement : ceux qui y ont joué, triables. Pas
                       // pour un championnat : son classement les montre.
                       if (table.eventDetail(_selected!) case final e?
-                          when !_isChampionship())
+                          when !_hasStandings())
                         Padding(
                           // Puis, un peu plus bas, la liste de ses parties.
                           padding: const EdgeInsets.only(top: 16, bottom: 24),
@@ -3565,14 +3724,14 @@ class _PointsDialogState extends State<_PointsDialog> {
 
 /// Classement d'un championnat, au style des listes : le rang et le nom,
 /// puis les rencontres jouées (J), gagnées (V), nulles (N), perdues (D) et
-/// les points ; ou bien, avec [glory], la Gloire en premier, devant les
-/// rencontres. Triable par chaque colonne ; le rang reste celui du
+/// les points ; ou bien, avec [leadLabel], la valeur (Gloire, ELO) en
+/// premier sous ce nom, devant les rencontres. Triable par chaque colonne ; le rang reste celui du
 /// classement.
 class _Standings extends StatefulWidget {
   const _Standings(
     this.standings, {
     super.key,
-    this.glory = false,
+    this.leadLabel,
     this.onTap,
     this.onRemove,
     this.onAdd,
@@ -3581,7 +3740,7 @@ class _Standings extends StatefulWidget {
 
   /// Dans l'ordre du classement.
   final List<Standing> standings;
-  final bool glory;
+  final String? leadLabel;
 
   /// Si non nul : chaque joueur est cliquable (son id).
   final ValueChanged<int>? onTap;
@@ -3596,7 +3755,7 @@ class _Standings extends StatefulWidget {
 
   static const double _countWidth = 36;
 
-  /// La colonne Gloire, plus large.
+  /// La colonne de [leadLabel], plus large.
   static const double _gloryWidth = 72;
 
   @override
@@ -3633,7 +3792,8 @@ class _StandingsState extends State<_Standings> {
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
     final add = widget.onAdd;
     final remove = widget.onRemove;
-    final glory = widget.glory;
+    final lead = widget.leadLabel;
+    final glory = lead != null;
     if (widget.standings.isEmpty) {
       if (add == null) return const SizedBox.shrink();
       return Center(
@@ -3681,7 +3841,7 @@ class _StandingsState extends State<_Standings> {
       if (!glory) (_StandingSort.score, _scoreWidth),
     ];
     String title(_StandingSort by) => switch (by) {
-      _StandingSort.score => glory ? 'Gloire' : 'Pts',
+      _StandingSort.score => lead ?? 'Pts',
       _StandingSort.played => 'J',
       _StandingSort.wins => 'V',
       _StandingSort.draws => 'N',
@@ -3838,9 +3998,13 @@ class _StandingsState extends State<_Standings> {
 /// grisé). Avec [onPlay] (connecté), un clic sur les scores d'une rencontre
 /// à jouer les fait saisir.
 class _Calendar extends StatelessWidget {
-  const _Calendar(this.fixtures, {this.onPlay});
+  const _Calendar(this.fixtures, {this.onPlay, this.showDays = true});
 
   final List<Fixture> fixtures;
+
+  /// Les rencontres sous le titre de leur journée (pas pour un groupe de
+  /// suisse : toutes ensemble).
+  final bool showDays;
   final Future<void> Function(Fixture fixture)? onPlay;
 
   @override
@@ -3906,14 +4070,15 @@ class _Calendar extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final MapEntry(key: day, value: list) in days.entries) ...[
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              'Journée ${day + 1}',
-              textAlign: TextAlign.center,
-              style: _text.copyWith(fontSize: 12, color: muted),
+          if (showDays)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Journée ${day + 1}',
+                textAlign: TextAlign.center,
+                style: _text.copyWith(fontSize: 12, color: muted),
+              ),
             ),
-          ),
           for (final f in list) line(f),
         ],
       ],

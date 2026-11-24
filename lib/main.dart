@@ -560,17 +560,20 @@ class _GamePageState extends State<GamePage> {
         await saveGame(event, game);
         _reloadEvent(event);
       },
-      setChampionship: (event, {returnLeg, playoffs, points}) async {
-        await players.saveChampionship(
-          event,
-          returnLeg: returnLeg,
-          playoffs: playoffs,
-          points: points,
-        );
-        _reloadEvent(event);
-      },
-      playFixture: (event, game, result) async {
-        await players.playFixture(event, game, result);
+      setChampionship:
+          (event, {returnLeg, playoffs, points, swissRounds, groupSize}) async {
+            await players.saveChampionship(
+              event,
+              returnLeg: returnLeg,
+              playoffs: playoffs,
+              points: points,
+              swissRounds: swissRounds,
+              groupSize: groupSize,
+            );
+            _reloadEvent(event);
+          },
+      playFixture: (event, game, result, {round}) async {
+        await players.playFixture(event, game, result, round: round);
         _reloadEvent(event);
       },
       addParty: (event, game, eventPlayers) => showDialog<void>(

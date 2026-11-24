@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'bracket.dart';
 import 'championship.dart';
+import 'swiss.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -33,6 +34,7 @@ class RowTable {
     this.eventPlayed,
     this.eventGames,
     this.eventChampionships,
+    this.eventSwiss,
     this.gameOptions = const [],
     this.sessionDetails,
     this.sessionLines,
@@ -160,6 +162,12 @@ class RowTable {
   final List<Championship?>? eventChampionships;
 
   Championship? eventChampionship(int index) => eventChampionships?[index];
+
+  /// Pour les événements Wargame : leur suisse (voir [Swiss]), affiché
+  /// quand l'événement est de ce type.
+  final List<Swiss?>? eventSwiss;
+
+  Swiss? eventSwissOf(int index) => eventSwiss?[index];
 
   /// Pour les parties de JDR : chaque ligne est une partie, affichée dans le
   /// détail à la manière d'une partie de Wargame, à la place de ses colonnes.
@@ -733,12 +741,14 @@ Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
     registrations,
     (:games, :places, :dates, :ids, :events),
     matches,
+    partyRounds,
   ) = await (
     db
         .from('evenement')
         .select(
           'id, nom, date, type, tours, jeu_id, aller_retour, playoffs, '
-          'points_victoire, points_nul, points_defaite, points_gloire',
+          'points_victoire, points_nul, points_defaite, points_gloire, '
+          'suisse_tours, suisse_groupe',
         )
         .order('nom', ascending: true),
     db.from('joueur').select('id, nom'),
@@ -750,7 +760,15 @@ Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
         .select(
           'evenement_id, tour, position, joueur1_id, joueur2_id, partie_id',
         ),
+    // Tour du suisse de chaque partie qui en a un.
+    db
+        .from('partie')
+        .select('id, evenement_tour')
+        .not('evenement_tour', 'is', null),
   ).wait;
+  final roundOf = {
+    for (final r in partyRounds) r['id'] as int: r['evenement_tour'] as int,
+  };
   final playerNames = {
     for (final p in players) p['id'] as int: p['nom'] as String,
   };
@@ -807,6 +825,124 @@ Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
     );
   }
 
+  /// Matchs des playoffs de l'événement [event] : la partie de chacun, par
+  /// (tour, position).
+  Map<(int, int), int?> playoffMatchesOf(int event) => {
+    for (final m in matches)
+      if (m['evenement_id'] == event)
+        (m['tour'] as int, m['position'] as int): m['partie_id'] as int?,
+  };
+
+  /// Tableau des [playoffs] de l'événement [event] (null : sans playoffs).
+  /// Une fois [ready], ses premiers sont ceux du classement [table] ;
+  /// ensuite, ses matchs sont remplis par les parties enregistrées. Avec
+  /// lui : si ses joueurs ont pu être placés.
+  (List<List<BracketMatch>>?, bool) playoffBracket(
+    int event,
+    Playoffs? playoffs,
+    List<Standing> table, {
+    required bool ready,
+  }) {
+    final rounds = playoffs?.rounds;
+    if (rounds == null) return (null, false);
+    final playoffMatches = playoffMatchesOf(event);
+    final seeded = ready ? seedPlayoffs(table, rounds.roundCount) : null;
+    final bracket = buildBracket(
+      rounds.roundCount,
+      [
+        for (final s in seeded ?? const <StoredMatch>[])
+          (
+            round: 0,
+            position: s.position,
+            player1: s.player1,
+            player2: s.player2,
+            party: playoffMatches[(0, s.position)],
+          ),
+        for (final MapEntry(key: (round, position), :value)
+            in playoffMatches.entries)
+          if (round > 0)
+            (
+              round: round,
+              position: position,
+              player1: null,
+              player2: null,
+              party: value,
+            ),
+      ],
+      partyScores,
+      playerNames,
+    );
+    return (bracket, seeded != null);
+  }
+
+  // Suisse : des tours de groupes, formés d'après l'ELO au jeu de
+  // l'événement, puis d'après l'ELO à l'événement ; le classement général
+  // par ELO à l'événement, puis les playoffs entre les premiers une fois le
+  // dernier tour joué. Leur vainqueur et leur finaliste finissent 1er et
+  // 2e du classement final.
+  Swiss swiss(Map<String, dynamic> r) {
+    final event = r['id'] as int;
+    final game = r['jeu_id'] as int?;
+    final players = swissStartOrder(
+      [for (final p in detail(event).players) (p.id, p.name)],
+      games: games,
+      events: events,
+      event: event,
+      game: game,
+    );
+    final playoffParties = {...playoffMatchesOf(event).values.nonNulls};
+    final parties = [
+      for (final (i, _) in games.indexed)
+        if (events[i] == event)
+          (id: ids[i], round: roundOf[ids[i]], score: partyScores[ids[i]]!),
+    ];
+    final roundCount = r['suisse_tours'] as int?;
+    final groupSize = r['suisse_groupe'] as int?;
+    final SwissRounds built = roundCount == null || groupSize == null
+        ? (rounds: const [], complete: false)
+        : buildSwiss(
+            players,
+            roundCount: roundCount,
+            groupSize: groupSize,
+            parties: [
+              for (final p in parties)
+                if (!playoffParties.contains(p.id)) p,
+            ],
+          );
+    var table = swissStandings(players, [for (final p in parties) p.score]);
+    final playoffs = Playoffs.fromKey(r['playoffs'] as String?);
+    final (bracket, seeded) = playoffBracket(
+      event,
+      playoffs,
+      table,
+      ready: built.complete,
+    );
+    // Fini : tous les tours joués, et la finale des playoffs s'il y en a.
+    final finale = bracket?.last.single;
+    final winner = finale == null ? null : winnerOf(finale);
+    final finished = built.complete && (!seeded || winner != null);
+    if (finished && winner != null) {
+      final finalist = winner == finale!.player1
+          ? finale.player2!
+          : finale.player1!;
+      table = [
+        for (final id in [winner.$1, finalist.$1])
+          table.firstWhere((s) => s.player.$1 == id),
+        for (final s in table)
+          if (s.player.$1 != winner.$1 && s.player.$1 != finalist.$1) s,
+      ];
+    }
+    return (
+      roundCount: roundCount,
+      groupSize: groupSize,
+      playoffs: playoffs,
+      rounds: built.rounds,
+      standings: table,
+      playoffBracket: bracket,
+      finished: finished,
+    );
+  }
+
   // Championnat : le calendrier entre ses joueurs, rempli par ses parties
   // (sauf celles des playoffs), le classement, puis les playoffs entre les
   // premiers une fois toutes les rencontres jouées.
@@ -814,12 +950,7 @@ Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
   Championship championship(Map<String, dynamic> r) {
     final event = r['id'] as int;
     final players = [for (final p in detail(event).players) (p.id, p.name)];
-    final playoffMatches = {
-      for (final m in matches)
-        if (m['evenement_id'] == event)
-          (m['tour'] as int, m['position'] as int): m['partie_id'] as int?,
-    };
-    final playoffParties = {...playoffMatches.values.nonNulls};
+    final playoffParties = {...playoffMatchesOf(event).values.nonNulls};
     final returnLeg = r['aller_retour'] as bool?;
     final fixtures = returnLeg == null
         ? <Fixture>[]
@@ -840,36 +971,13 @@ Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
     );
     final table = standings(players, fixtures, points);
     final playoffs = Playoffs.fromKey(r['playoffs'] as String?);
-    List<List<BracketMatch>>? bracket;
-    if (playoffs?.rounds case final rounds?) {
-      final complete = fixtures.isNotEmpty && fixtures.every(isFixturePlayed);
-      final seeded = complete ? seedPlayoffs(table, rounds.roundCount) : null;
-      bracket = buildBracket(
-        rounds.roundCount,
-        [
-          for (final s in seeded ?? const <StoredMatch>[])
-            (
-              round: 0,
-              position: s.position,
-              player1: s.player1,
-              player2: s.player2,
-              party: playoffMatches[(0, s.position)],
-            ),
-          for (final MapEntry(key: (round, position), :value)
-              in playoffMatches.entries)
-            if (round > 0)
-              (
-                round: round,
-                position: position,
-                player1: null,
-                player2: null,
-                party: value,
-              ),
-        ],
-        partyScores,
-        playerNames,
-      );
-    }
+    final complete = fixtures.isNotEmpty && fixtures.every(isFixturePlayed);
+    final (bracket, _) = playoffBracket(
+      event,
+      playoffs,
+      table,
+      ready: complete,
+    );
     return (
       returnLeg: returnLeg,
       playoffs: playoffs,
@@ -882,6 +990,7 @@ Future<RowTable> _fetchWargameEvents(SupabaseClient db) async {
 
   return RowTable(
     eventChampionships: [for (final r in rows) championship(r)],
+    eventSwiss: [for (final r in rows) swiss(r)],
     // Bannière : celle du jeu de l'événement ; aucune tant qu'il n'est pas
     // choisi.
     banners: [
@@ -1236,18 +1345,37 @@ typedef Championship = ({
   List<List<BracketMatch>>? playoffBracket,
 });
 
-/// Enregistre les réglages du championnat de l'événement Wargame [eventId]
-/// (backoffice) : seulement ceux qui sont donnés.
+/// Suisse d'un événement Wargame : son nombre de tours et de joueurs par
+/// groupe (null : pas encore choisis), ses playoffs (null : pas encore
+/// choisis), ses tours formés jusqu'ici (chacun ses groupes, chaque groupe
+/// ses rencontres), son classement (général, ou final une fois [finished])
+/// et le tableau de ses playoffs (null : sans playoffs).
+typedef Swiss = ({
+  int? roundCount,
+  int? groupSize,
+  Playoffs? playoffs,
+  List<List<List<Fixture>>> rounds,
+  List<Standing> standings,
+  List<List<BracketMatch>>? playoffBracket,
+  bool finished,
+});
+
+/// Enregistre les réglages du championnat ou du suisse de l'événement
+/// Wargame [eventId] (backoffice) : seulement ceux qui sont donnés.
 Future<void> saveChampionship(
   int eventId, {
   bool? returnLeg,
   Playoffs? playoffs,
   ChampionshipPoints? points,
+  int? swissRounds,
+  int? groupSize,
 }) => Supabase.instance.client
     .from('evenement')
     .update({
       'aller_retour': ?returnLeg,
       'playoffs': ?playoffs?.key,
+      'suisse_tours': ?swissRounds,
+      'suisse_groupe': ?groupSize,
       if (points != null) ...{
         'points_victoire': points.win,
         'points_nul': points.draw,
@@ -1257,19 +1385,23 @@ Future<void> saveChampionship(
     })
     .eq('id', eventId);
 
-/// Joue une rencontre du championnat de l'événement [eventId] (backoffice)
-/// : enregistre sa partie, au jeu [gameId].
-Future<void> playFixture(int eventId, int gameId, PartyScore result) =>
-    addParty((
-      player1: result.player1,
-      player2: result.player2,
-      score1: result.score1,
-      score2: result.score2,
-      game: gameId,
-      place: null,
-      event: eventId,
-      date: null,
-    ));
+/// Joue une rencontre du championnat ou du suisse (tour [round]) de
+/// l'événement [eventId] (backoffice) : enregistre sa partie, au jeu
+/// [gameId].
+Future<void> playFixture(
+  int eventId,
+  int gameId,
+  PartyScore result, {
+  int? round,
+}) => Supabase.instance.client.from('partie').insert({
+  'joueur1_id': result.player1,
+  'joueur2_id': result.player2,
+  'score_joueur1': result.score1,
+  'score_joueur2': result.score2,
+  'jeu_id': gameId,
+  'evenement_id': eventId,
+  'evenement_tour': ?round,
+});
 
 /// Enregistre le nombre de tours de l'événement Wargame [eventId]
 /// (backoffice).
@@ -1362,9 +1494,17 @@ typedef EventPlayersEditor = ({
     bool? returnLeg,
     Playoffs? playoffs,
     ChampionshipPoints? points,
+    int? swissRounds,
+    int? groupSize,
   })
   saveChampionship,
-  Future<void> Function(int eventId, int gameId, PartyScore result) playFixture,
+  Future<void> Function(
+    int eventId,
+    int gameId,
+    PartyScore result, {
+    int? round,
+  })
+  playFixture,
 });
 
 /// Tous les joueurs Wargame (id, nom), par nom.

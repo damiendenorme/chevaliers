@@ -9,6 +9,7 @@ import 'package:chevaliers/data/auth.dart';
 import 'package:chevaliers/data/bracket.dart';
 import 'package:chevaliers/data/championship.dart';
 import 'package:chevaliers/data/rows.dart';
+import 'package:chevaliers/data/swiss.dart';
 import 'package:chevaliers/data/rpg_rows.dart';
 import 'package:chevaliers/main.dart';
 import 'package:chevaliers/widgets/row_list.dart';
@@ -1478,8 +1479,15 @@ void main() {
             },
             setBracketPlayer: (_, _, _, _) async {},
             playBracketMatch: (_, _, _, _, _) async {},
-            saveChampionship: (_, {returnLeg, playoffs, points}) async {},
-            playFixture: (_, _, _) async {},
+            saveChampionship: (
+              _, {
+              returnLeg,
+              playoffs,
+              points,
+              swissRounds,
+              groupSize,
+            }) async {},
+            playFixture: (_, _, _, {round}) async {},
           ),
         ),
       ),
@@ -2122,8 +2130,15 @@ void main() {
                 placed.add((e, pos, side, player)),
             playBracketMatch: (e, game, round, pos, result) async =>
                 played.add((e, game, round, pos, result)),
-            saveChampionship: (_, {returnLeg, playoffs, points}) async {},
-            playFixture: (_, _, _) async {},
+            saveChampionship: (
+              _, {
+              returnLeg,
+              playoffs,
+              points,
+              swissRounds,
+              groupSize,
+            }) async {},
+            playFixture: (_, _, _, {round}) async {},
           ),
         ),
       ),
@@ -2235,9 +2250,15 @@ void main() {
             remove: (_, _) async {},
             setBracketPlayer: (_, _, _, _) async {},
             playBracketMatch: (_, _, _, _, _) async {},
-            saveChampionship: (e, {returnLeg, playoffs, points}) async =>
-                settings.add((e, returnLeg, playoffs, points)),
-            playFixture: (e, game, result) async =>
+            saveChampionship: (
+              e, {
+              returnLeg,
+              playoffs,
+              points,
+              swissRounds,
+              groupSize,
+            }) async => settings.add((e, returnLeg, playoffs, points)),
+            playFixture: (e, game, result, {round}) async =>
                 played.add((e, game, result)),
           ),
         ),
@@ -2314,6 +2335,128 @@ void main() {
       null,
       (win: 3, draw: 1, loss: 0, glory: true),
     ));
+  });
+
+  testWidgets('A Swiss event shows its standings, rounds and settings', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final settings = <(int?, int?)>[];
+    final played = <(int, int?, PartyScore)>[];
+    final auth = FakeAuth();
+    const players = [
+      (1, 'Arthur'),
+      (2, 'Bors'),
+      (3, 'Gauvain'),
+      (4, 'Lancelot'),
+    ];
+    // Tour 1 joué ; le tour 2 regroupe les vainqueurs, à jouer.
+    const parties = [
+      (id: 10, round: 0, score: (player1: 1, player2: 2, score1: 3, score2: 0)),
+      (id: 11, round: 0, score: (player1: 3, player2: 4, score1: 0, score2: 2)),
+    ];
+    final built = buildSwiss(
+      players,
+      roundCount: 3,
+      groupSize: 2,
+      parties: parties,
+    );
+    final Swiss swiss = (
+      roundCount: 3,
+      groupSize: 2,
+      playoffs: Playoffs.aucun,
+      rounds: built.rounds,
+      standings: swissStandings(players, [for (final p in parties) p.score]),
+      playoffBracket: null,
+      finished: false,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MyHomePage(
+          loadRows: (_) async => RowTable(
+            columns: const ['Nom'],
+            rows: const [
+              ['Camlann'],
+            ],
+            rowIds: const [7],
+            eventIds: const [7],
+            eventTypes: const [EventType.suisse],
+            eventSwiss: [swiss],
+            eventGames: const [(5, 'Échecs')],
+            eventDetails: const [
+              (
+                players: [
+                  (id: 1, name: 'Arthur', glory: 0),
+                  (id: 2, name: 'Bors', glory: 0),
+                  (id: 3, name: 'Gauvain', glory: 0),
+                  (id: 4, name: 'Lancelot', glory: 0),
+                ],
+              ),
+            ],
+          ),
+          loadCounts: () async =>
+              (players: 4, events: 1, games: 2, boardGames: 1),
+          auth: auth,
+          eventPlayers: (
+            players: () async => const [],
+            add: (_, _) async {},
+            remove: (_, _) async {},
+            setBracketPlayer: (_, _, _, _) async {},
+            playBracketMatch: (_, _, _, _, _) async {},
+            saveChampionship: (
+              _, {
+              returnLeg,
+              playoffs,
+              points,
+              swissRounds,
+              groupSize,
+            }) async => settings.add((swissRounds, groupSize)),
+            playFixture: (e, game, result, {round}) async =>
+                played.add((e, round, result)),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(inList('Camlann'));
+    await tester.pump();
+
+    expect(inList('3 tours'), findsOneWidget);
+    expect(inList('Groupes de 2 joueurs'), findsOneWidget);
+    expect(inList('Sans playoffs'), findsOneWidget);
+    expect(inList('Classement général'), findsOneWidget);
+    expect(inList('ELO'), findsOneWidget);
+    expect(inList('Tour 1'), findsOneWidget);
+    expect(inList('Tour 2'), findsOneWidget);
+    expect(inList('Groupe 2'), findsNWidgets(2));
+    expect(inList('Tour 3 : formé à la fin du tour 2.'), findsOneWidget);
+    expect(inList('3 – 0'), findsOneWidget);
+    // Pas de liste des joueurs à part.
+    expect(inList('Gloire'), findsNothing);
+
+    await auth.signIn('arthur@table.fr', 'excalibur');
+    await tester.pump();
+
+    // Une rencontre du tour 2 : sa partie est de ce tour.
+    await tester.tap(find.text('+').first);
+    await tester.pumpAndSettle();
+    final scores = find.widgetWithText(TextField, 'Score');
+    await tester.enterText(scores.at(0), '1');
+    await tester.enterText(scores.at(1), '0');
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(played.single.$1, 7);
+    expect(played.single.$2, 1);
+
+    // La taille des groupes.
+    await tester.tap(find.byTooltip('Choisir la taille des groupes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Groupes de 4 joueurs').last);
+    await tester.pumpAndSettle();
+    expect(settings, [(null, 4)]);
   });
 
   testWidgets('A Wargame event has a type, chosen when signed in', (
