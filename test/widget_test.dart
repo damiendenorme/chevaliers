@@ -2431,14 +2431,13 @@ void main() {
     expect(inList('Groupes de 2 joueurs'), findsOneWidget);
     expect(inList('Sans playoffs'), findsOneWidget);
     expect(inList('Classement général'), findsOneWidget);
-    expect(inList('ELO'), findsOneWidget);
+    // Une seule fois : pas de liste des joueurs à part.
+    expect(inList('Gloire'), findsOneWidget);
     expect(inList('Tour 1'), findsOneWidget);
     expect(inList('Tour 2'), findsOneWidget);
     expect(inList('Groupe 2'), findsNWidgets(2));
     expect(inList('Tour 3 : formé à la fin du tour 2.'), findsOneWidget);
     expect(inList('3 – 0'), findsOneWidget);
-    // Pas de liste des joueurs à part.
-    expect(inList('Gloire'), findsNothing);
 
     await auth.signIn('arthur@table.fr', 'excalibur');
     await tester.pump();

@@ -698,7 +698,7 @@ class _MasterDetailState extends State<_MasterDetail> {
               eventId,
               sw.standings,
               sw.finished ? 'Classement final' : 'Classement général',
-              leadLabel: 'ELO',
+              leadLabel: 'Gloire',
             ),
           for (final (r, groups) in sw.rounds.indexed)
             Column(
