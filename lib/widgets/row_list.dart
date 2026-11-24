@@ -244,8 +244,14 @@ class _Cards extends StatelessWidget {
         radius: const Radius.circular(3),
         crossAxisMargin: BevelEdge.width + 2,
         mainAxisMargin: BevelEdge.width + 2,
+        // Opaque, pour passer au premier plan (rien ne transparaît, même la
+        // ligne choisie) : la teinte qu'elle avait, translucide, sur le fond
+        // sombre des cartes.
         thumbColor: WidgetStatePropertyAll(
-          AccentStyle.of(context).border.withValues(alpha: 0.7),
+          Color.alphaBlend(
+            AccentStyle.of(context).border.withValues(alpha: 0.7),
+            topBarColor,
+          ),
         ),
       ),
       child: _row(),
