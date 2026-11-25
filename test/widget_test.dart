@@ -75,14 +75,12 @@ void main() {
     final screenRect = tester.getRect(find.byType(MyHomePage));
     expect(plate.top, screenRect.top + 12);
     expect(plate.right, screenRect.right - 12);
-    // Facebook puis Instagram dessous, de même largeur.
-    final facebook = plateOf('Facebook');
+    // Instagram dessous, de même largeur ; plus de Facebook.
     final instagram = plateOf('Instagram');
-    expect(facebook.top, greaterThan(plate.bottom));
-    expect(instagram.top, greaterThan(facebook.bottom));
-    expect(facebook.width, plate.width);
+    expect(instagram.top, greaterThan(plate.bottom));
     expect(instagram.width, plate.width);
-    expect(facebook.right, plate.right);
+    expect(instagram.right, plate.right);
+    expect(find.text('Facebook'), findsNothing);
 
     final screen = tester.getRect(find.byType(MyHomePage));
     await tester.tap(find.byType(SectionButton).first);

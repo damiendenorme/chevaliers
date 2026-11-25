@@ -339,9 +339,8 @@ class _MyHomePageState extends State<MyHomePage> {
                 child: const TitleBanner(),
               ),
             ),
-            // En haut à droite, à l'écart des bords : Discord, puis Facebook
-            // et Instagram dessous, de même largeur, aux couleurs de la page
-            // affichée.
+            // En haut à droite, à l'écart des bords : Discord, puis Instagram
+            // dessous, de même largeur, aux couleurs de la page affichée.
             Positioned(
               top: 12,
               right: 12,
@@ -353,7 +352,6 @@ class _MyHomePageState extends State<MyHomePage> {
                     spacing: 8,
                     children: [
                       _SocialPlate(Icon(Icons.discord, size: 18), 'Discord'),
-                      _SocialPlate(Icon(Icons.facebook, size: 18), 'Facebook'),
                       _SocialPlate(
                         FaIcon(FontAwesomeIcons.instagram, size: 18),
                         'Instagram',
