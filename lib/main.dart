@@ -351,7 +351,11 @@ class _MyHomePageState extends State<MyHomePage> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     spacing: 8,
                     children: [
-                      _SocialPlate(Icon(Icons.discord, size: 18), 'Discord'),
+                      _SocialPlate(
+                        Icon(Icons.discord, size: 18),
+                        'Discord',
+                        url: _discord,
+                      ),
                       _SocialPlate(
                         FaIcon(FontAwesomeIcons.instagram, size: 18),
                         'Instagram',
@@ -402,6 +406,9 @@ class _SocialPlate extends StatelessWidget {
     };
   }
 }
+
+/// Invitation au Discord du club.
+const _discord = 'https://discord.gg/XMmFY4w3e';
 
 /// Page Instagram du club.
 const _instagram =
