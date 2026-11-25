@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'data/auth.dart';
 import 'data/rows.dart';
@@ -356,6 +357,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       _SocialPlate(
                         FaIcon(FontAwesomeIcons.instagram, size: 18),
                         'Instagram',
+                        url: _instagram,
                       ),
                     ],
                   ),
@@ -371,14 +373,17 @@ class _MyHomePageState extends State<MyHomePage> {
 
 /// Plaque d'un réseau social : son icône et son nom.
 class _SocialPlate extends StatelessWidget {
-  const _SocialPlate(this.icon, this.label);
+  const _SocialPlate(this.icon, this.label, {this.url});
 
   final Widget icon;
   final String label;
 
+  /// Page ouverte au clic (rien si null).
+  final String? url;
+
   @override
   Widget build(BuildContext context) {
-    return Plate(
+    final plate = Plate(
       child: Row(
         spacing: 8,
         children: [
@@ -387,8 +392,23 @@ class _SocialPlate extends StatelessWidget {
         ],
       ),
     );
+    return switch (url) {
+      null => plate,
+      final url => MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () => launchUrl(Uri.parse(url)),
+          child: plate,
+        ),
+      ),
+    };
   }
 }
+
+/// Page Instagram du club.
+const _instagram =
+    'https://www.instagram.com/les.chevaliers.de.la.gardiole/'
+    '?utm_source=ig_web_button_share_sheet';
 
 /// Une page (Wargame ou RPG) : l'encoche des nombres en haut, la barre des
 /// sections et les deux cartes, avec les données de [loadRows] et

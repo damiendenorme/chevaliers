@@ -45,14 +45,6 @@ class AccentStyle {
     edge: (Color(0xFF3A2A18), Color(0xFFC8A66C), Color(0xFF4A3822)),
   );
 
-  /// Gris neutre : bourrelet des marque-pages inactifs.
-  static const inactive = AccentStyle(
-    Color(0xFF5A5652),
-    Color(0xFF6E6762),
-    hover: Color(0xFF2E2B29),
-    edge: (Color(0xFF1E1C1A), Color(0xFF8A8580), Color(0xFF2A2725)),
-  );
-
   /// RPG : bronze, plus cuivré et plus sombre que l'or du Wargame.
   static const rpg = AccentStyle(
     Color(0xFF6C4321),
@@ -331,12 +323,8 @@ class _BookmarkState extends State<Bookmark> {
     final accent = widget.accent;
     final visible = active ? Bookmark.activeWidth : Bookmark.inactiveWidth;
     final total = visible + Bookmark._hidden;
-    // Actif : bourrelet et survol aux couleurs de sa page ; inactif : gris.
-    final style = active ? accent : AccentStyle.inactive;
-    final color = active
-        ? Colors.white
-        : DefaultTextStyle.of(context).style.color ??
-              Theme.of(context).colorScheme.onSurface;
+    // Actif ou replié : bourrelet, fond et survol aux couleurs de sa page.
+    const color = Colors.white;
     final line = Row(
       mainAxisSize: MainAxisSize.min,
       spacing: 6,
@@ -351,7 +339,7 @@ class _BookmarkState extends State<Bookmark> {
       ],
     );
     return AccentScope(
-      style: style,
+      style: accent,
       child: Transform.translate(
         offset: const Offset(-Bookmark._hidden, 0),
         // Tiré (actif) : il s'élargit, avec un léger dépassement comme un
@@ -365,57 +353,61 @@ class _BookmarkState extends State<Bookmark> {
             button: true,
             selected: active,
             // Non choisi : sans effet de creux, et bombé (un reflet le long du
-            // marque-page, plus sombre vers ses bords visibles).
+            // marque-page, plus sombre vers ses bords visibles), sur le fond
+            // texturé de sa couleur.
             child: CardSurface(
               inset: active,
               Material(
                 color: Colors.transparent,
                 child: Ink(
-                  decoration: active
-                      ? accent.texture
-                      : BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: const [
-                              Color(0x40000000),
-                              Color(0x2EFFFFFF),
-                              Color(0x00FFFFFF),
-                              Color(0x66000000),
-                            ],
-                            stops: [Bookmark._hidden / total, 0.55, 0.75, 1],
+                  decoration: accent.texture,
+                  child: Ink(
+                    decoration: active
+                        ? const BoxDecoration()
+                        : BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: const [
+                                Color(0x40000000),
+                                Color(0x2EFFFFFF),
+                                Color(0x00FFFFFF),
+                                Color(0x66000000),
+                              ],
+                              stops: [Bookmark._hidden / total, 0.55, 0.75, 1],
+                            ),
                           ),
+                    // Survol coupé une fois actif et l'animation terminée : son
+                    // fond reste visible. La clé recrée l'encre à ce moment-là,
+                    // pour effacer le survol déjà affiché.
+                    child: InkWell(
+                      key: ValueKey(_hoverOff),
+                      onTap: widget.onPressed,
+                      hoverColor: _hoverOff ? Colors.transparent : accent.hover,
+                      // Son nom puis son icône sur une ligne, centrée dans la
+                      // partie visible : à l'horizontale s'il est actif, tournée
+                      // à la verticale (lue de bas en haut) sinon.
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          Bookmark._hidden,
+                          16,
+                          0,
+                          16,
                         ),
-                  // Survol coupé une fois actif et l'animation terminée : son
-                  // fond reste visible. La clé recrée l'encre à ce moment-là,
-                  // pour effacer le survol déjà affiché.
-                  child: InkWell(
-                    key: ValueKey(_hoverOff),
-                    onTap: widget.onPressed,
-                    hoverColor: _hoverOff ? Colors.transparent : style.hover,
-                    // Son nom puis son icône sur une ligne, centrée dans la
-                    // partie visible : à l'horizontale s'il est actif, tournée
-                    // à la verticale (lue de bas en haut) sinon.
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        Bookmark._hidden,
-                        16,
-                        0,
-                        16,
-                      ),
-                      // La ligne tourne d'un quart de tour pendant
-                      // l'animation : de la verticale à l'horizontale quand
-                      // on le tire, et inversement. Elle garde sa taille,
-                      // le marque-page la découpe si besoin.
-                      child: Center(
-                        child: OverflowBox(
-                          maxWidth: double.infinity,
-                          maxHeight: double.infinity,
-                          child: AnimatedRotation(
-                            turns: active ? 0 : -0.25,
-                            duration: Bookmark.duration,
-                            curve: active
-                                ? Curves.easeOutBack
-                                : Curves.easeInOutCubic,
-                            child: line,
+                        // La ligne tourne d'un quart de tour pendant
+                        // l'animation : de la verticale à l'horizontale quand
+                        // on le tire, et inversement. Elle garde sa taille,
+                        // le marque-page la découpe si besoin.
+                        child: Center(
+                          child: OverflowBox(
+                            maxWidth: double.infinity,
+                            maxHeight: double.infinity,
+                            child: AnimatedRotation(
+                              turns: active ? 0 : -0.25,
+                              duration: Bookmark.duration,
+                              curve: active
+                                  ? Curves.easeOutBack
+                                  : Curves.easeInOutCubic,
+                              child: line,
+                            ),
                           ),
                         ),
                       ),
