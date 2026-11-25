@@ -54,7 +54,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Les Chevaliers',
+      title: 'Les Chevaliers Occitans',
       debugShowCheckedModeBanner: false,
       // En français (calendrier, textes des composants).
       locale: const Locale('fr'),
